@@ -1,0 +1,3566 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerichteter Graph Viewer v4.11</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --border: #334155;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --violet: #a78bfa;
+      --rose: #f472b6;
+      --yellow: #fde68a;
+      --lime: #bef264;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    body { min-height: 100vh; }
+
+    .app {
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    .toolbar {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: stretch;
+      padding: 8px 10px;
+      background: linear-gradient(180deg, #111827, #0b1220);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .toolbar-group {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      padding-right: 10px;
+      border-right: 1px solid rgba(148, 163, 184, 0.16);
+      min-height: 0;
+    }
+    .toolbar-group:last-child { border-right: none; padding-right: 0; }
+
+    .sidebar {
+      background: rgba(17, 24, 39, 0.95);
+      border-right: 1px solid var(--border);
+      padding: 16px;
+      overflow: auto;
+    }
+
+    .graph-wrap {
+      position: relative;
+      min-height: 0;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.08), transparent 30%),
+        radial-gradient(circle at 80% 10%, rgba(34, 197, 94, 0.08), transparent 25%),
+        linear-gradient(180deg, #0b1020, #0a0f1b);
+    }
+
+    #cy { position: absolute; inset: 0; }
+
+    .drop-hint {
+      position: absolute;
+      inset: 12px;
+      border: 2px dashed rgba(148, 163, 184, 0.3);
+      border-radius: 14px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.78);
+      color: var(--text);
+      z-index: 5;
+      font-size: 1.1rem;
+      pointer-events: none;
+    }
+    .drop-hint.active { display: flex; }
+
+    h1, h2, h3 { margin: 0 0 10px; }
+    h1 { font-size: 1rem; color: white; }
+    h2 { font-size: 0.98rem; margin-top: 18px; }
+    p, li { color: var(--text); line-height: 1.45; }
+    .muted { color: var(--muted); font-size: 0.92rem; }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.72), rgba(15, 23, 42, 0.84));
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    }
+
+    .field { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+    .field.compact { min-width: 96px; }
+    label { font-size: 0.78rem; color: var(--muted); line-height: 1.15; }
+
+    input[type="text"], input[type="file"], input[type="number"], textarea, select {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      padding: 8px 10px;
+      outline: none;
+      font-size: 0.92rem;
+    }
+
+    input[type="text"]:focus, input[type="file"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
+      border-color: rgba(56, 189, 248, 0.8);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+    }
+
+    button {
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 9px;
+      padding: 8px 10px;
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+      color: var(--text);
+      cursor: pointer;
+      transition: transform 0.08s ease, border-color 0.18s ease, background 0.18s ease;
+      white-space: nowrap;
+      font-size: 0.9rem;
+      line-height: 1.15;
+    }
+    button:hover { border-color: rgba(56, 189, 248, 0.55); background: linear-gradient(180deg, rgba(37, 99, 235, 0.16), rgba(15, 23, 42, 0.95)); }
+    button:active { transform: translateY(1px); }
+    button.primary { border-color: rgba(56, 189, 248, 0.5); }
+    button.warn { border-color: rgba(245, 158, 11, 0.45); }
+    button.violet { border-color: rgba(167, 139, 250, 0.52); }
+    button.rose { border-color: rgba(244, 114, 182, 0.52); }
+    button.success { border-color: rgba(34, 197, 94, 0.52); }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 9px;
+      padding: 7px 9px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .badges, .chips, .button-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .badge, .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(56, 189, 248, 0.12);
+      color: #dbeafe;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+    }
+    .chip button { border: none; background: transparent; padding: 0; min-width: auto; color: #dbeafe; line-height: 1; }
+
+    .legend { display: grid; gap: 8px; margin-top: 10px; }
+    .legend-item { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 0.92rem; }
+    .swatch { width: 14px; height: 14px; border-radius: 999px; display: inline-block; border: 1px solid rgba(255,255,255,0.35); }
+
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .stat { background: rgba(15, 23, 42, 0.62); border: 1px solid rgba(148, 163, 184, 0.16); border-radius: 12px; padding: 10px; }
+    .stat .value { display: block; font-size: 1.25rem; font-weight: 700; color: white; }
+
+    .status { font-size: 0.92rem; color: var(--muted); min-height: 1.2em; }
+    .node-meta, .algo-meta { display: grid; gap: 10px; font-size: 0.95rem; }
+    .node-meta code, .algo-meta code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      padding: 2px 6px;
+      border-radius: 8px;
+    }
+
+    .help-list { padding-left: 18px; margin: 8px 0 0; }
+    .footer-note { margin-top: 6px; font-size: 0.82rem; color: var(--muted); }
+
+    .dropdown {
+      position: relative;
+      min-width: 270px;
+      max-width: 360px;
+    }
+    .dropdown-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 12px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+      padding: 10px;
+      z-index: 30;
+      display: none;
+    }
+    .dropdown.open .dropdown-panel { display: block; }
+    .category-list {
+      max-height: 220px;
+      overflow: auto;
+      display: grid;
+      gap: 6px;
+      margin-top: 8px;
+      padding-right: 4px;
+    }
+    .category-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: 10px;
+      background: rgba(30, 41, 59, 0.45);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .category-item:hover { border-color: rgba(56, 189, 248, 0.35); }
+    .category-item.hidden { display: none; }
+    .category-item input { accent-color: #38bdf8; }
+
+    .summary-line {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 44px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,0.2);
+      background: rgba(15,23,42,0.65);
+      padding: 8px 10px;
+      color: var(--text);
+    }
+
+
+    .algorithm-description {
+      margin-top: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.55);
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.92rem;
+    }
+
+    .layer-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+    }
+
+    .layer-btn {
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .layer-btn.active {
+      background: rgba(167, 139, 250, 0.22);
+      border-color: rgba(167, 139, 250, 0.85);
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.12);
+    }
+
+
+    .layer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 8px 0 12px;
+    }
+
+    .layer-action-btn {
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 10px;
+      padding: 7px 10px;
+      background: rgba(15, 23, 42, 0.82);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.88rem;
+    }
+
+    .layer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .layer-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.38);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+
+    .layer-row.active {
+      border-color: rgba(190, 242, 100, 0.65);
+      box-shadow: 0 0 0 2px rgba(190, 242, 100, 0.12);
+    }
+
+    .layer-swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      margin-top: 3px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255,255,255,0.5);
+    }
+
+    .layer-row-text {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .search-results-line {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .click-path-line {
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .click-mode-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      color: var(--text);
+      font-size: 0.84rem;
+      margin: 4px 6px 0 0;
+    }
+
+    .click-path-node {
+      color: var(--text);
+    }
+
+    .click-mode-hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+
+    .toolbar-stack { display: flex; flex-direction: column; gap: 4px; }
+    .toolbar button, .toolbar input, .toolbar select { min-height: 34px; }
+    .toolbar .summary-line { font-size: 0.8rem; }
+
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(60vh, 1fr); }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+      .dropdown { min-width: 240px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <div class="field" style="min-width: 290px;">
+          <label for="jsonFile">JSON-Datei laden</label>
+          <input id="jsonFile" type="file" accept="application/json,.json" />
+        </div>
+      </div>
+
+      <div class="toolbar-group">
+        <div class="field" style="min-width: 260px;">
+          <label for="nodeSearch">Knotensuche</label>
+          <input id="nodeSearch" type="text" placeholder="Nach ID, Name, Kategorie oder Beschreibung suchen ..." autocomplete="off" />
+        </div>
+        <button id="searchNodesBtn" class="primary">Suchen</button>
+        <button id="clearSearchBtn">Suche löschen</button>
+      </div>
+
+      <div class="toolbar-group">
+        <div class="dropdown" id="categoryDropdownWrap">
+          <label for="categorySearch">Kategorienfilter (markiert nur passende Knoten)</label>
+          <input id="categorySearch" type="text" placeholder="Kategorien suchen ..." autocomplete="off" />
+          <div class="dropdown-panel">
+            <div class="summary-line" id="categorySummary">Keine Kategorien ausgewählt.</div>
+            <div class="category-list" id="categoryList"></div>
+          </div>
+          <div class="chips" id="selectedCategoryChips"></div>
+        </div>
+        <div class="field compact">
+          <label for="filterModeSelect">Filterart</label>
+          <select id="filterModeSelect">
+            <option value="and" selected>AND</option>
+            <option value="or">OR</option>
+          </select>
+        </div>
+        <button id="applyFilterBtn" class="primary">Filter anwenden</button>
+        <button id="clearFilterBtn">Zurücksetzen</button>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="toggle"><input id="recursiveToggle" type="checkbox" /> rekursiv</label>
+        <div class="field compact">
+          <label for="recursionDepthSelect">Tiefe</label>
+          <select id="recursionDepthSelect">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="all" selected>alle</option>
+          </select>
+        </div>
+        <button id="showPredecessorsBtn" class="warn">Vorgänger</button>
+        <button id="showSuccessorsBtn" class="primary">Nachfolger</button>
+        <button id="showBothBtn" class="violet">Beides</button>
+        <button id="clearHighlightsBtn">Markierungen löschen</button>
+      </div>
+
+      <div class="toolbar-group">
+        <button id="isolateBtn" class="success">Fokus isolieren</button>
+        <button id="clearIsolationBtn">Isolation aufheben</button>
+        <button id="relayoutBtn">Neu anordnen</button>
+        <div class="field compact">
+          <label for="relayoutModeSelect">Layoutmodus</label>
+          <select id="relayoutModeSelect">
+            <option value="compact" selected>Kompakt</option>
+            <option value="flow">Nachfolger lesbar</option>
+          </select>
+        </div>
+        <button id="fitBtn">Ansicht einpassen</button>
+      </div>
+
+      <div class="toolbar-group">
+        <button id="clickTraversalBtn" class="primary">Durchklick-Modus starten</button>
+        <button id="clearClickTraversalBtn">Durchklick-Modus beenden</button>
+      </div>
+
+      <div class="toolbar-group">
+        <div class="toolbar-stack">
+          <div class="summary-line" id="algorithmSourceSummary">Quelle: keine</div>
+          <div class="summary-line" id="algorithmTargetSummary">Ziel: keine</div>
+        </div>
+        <button id="setSourceBtn">Ausgewählten als Quelle</button>
+        <button id="setTargetBtn">Ausgewählten als Ziel</button>
+      </div>
+    </div>
+
+    <aside class="sidebar">
+      <div class="panel">
+        <h1>Gerichteter Graph Viewer v4.11</h1>
+        <p class="muted">Lade eine JSON-Datei oder ziehe sie direkt in die Graphfläche. Filter markieren passende Knoten. Isolierung blendet danach nur den aktuellen Fokus-Teilgraphen ein und ordnet ihn neu an. Für „Neu anordnen“ gibt es jetzt einen kompakten und einen nachfolgerorientierten Layoutmodus.</p>
+        <div class="stats">
+          <div class="stat"><span class="value" id="nodeCount">0</span><span class="muted">Knoten</span></div>
+          <div class="stat"><span class="value" id="edgeCount">0</span><span class="muted">Kanten</span></div>
+          <div class="stat"><span class="value" id="visibleNodeCount">0</span><span class="muted">sichtbar</span></div>
+          <div class="stat"><span class="value" id="categoryCount">0</span><span class="muted">Kategorien</span></div>
+        </div>
+        <p class="status" id="statusMessage">Noch keine JSON-Datei geladen.</p>
+        <div id="searchResultInfo" class="search-results-line">Noch keine Knotensuche ausgeführt.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Ausgewählter Knoten</h2>
+        <div id="selectedNodeInfo" class="node-meta muted">Kein Knoten ausgewählt.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Ausgewählte Kante</h2>
+        <div id="selectedEdgeInfo" class="node-meta muted">Keine Kante ausgewählt.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Durchklick-Modus</h2>
+        <div id="clickTraversalInfo" class="node-meta muted">Durchklick-Modus ist aus. Wähle einen Knoten und starte den Modus, um nur den aktiven Pfad sowie die direkten Vorgänger und Nachfolger des aktuellen Fokus lokal anzuzeigen.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Algorithmus-Werkzeugkasten</h2>
+        <div class="field">
+          <label for="algorithmSelect">Algorithmus</label>
+          <select id="algorithmSelect">
+            <option value="weak-component">Schwach verbundene Komponente des ausgewählten Knotens</option>
+            <option value="strong-component">Starke Komponente des ausgewählten Knotens</option>
+            <option value="sources">Quellen (Knoten ohne Vorgänger)</option>
+            <option value="sinks">Senken (Knoten ohne Nachfolger)</option>
+            <option value="cycles">Knoten in Zyklen</option>
+            <option value="topo">Topologische Ordnung / Schichten</option>
+            <option value="source-flow">Quellenbasierte Flow-Subgraphen</option>
+            <option value="path-cover">Minimum Path Cover / Pfadzerlegung</option>
+            <option value="longest-dag">Längster Pfad im DAG</option>
+            <option value="shortest-path">Kürzester Pfad von Quelle nach Ziel</option>
+            <option value="shortest-tree">Kürzeste-Wege-Baum ab Quelle</option>
+            <option value="mst">Minimaler Spannbaum (ungerichtet interpretiert)</option>
+            <option value="pagerank">PageRank Top-N</option>
+            <option value="degree-top">Top-N nach Grad</option>
+            <option value="betweenness-top">Top-N nach Betweenness-Zentralität</option>
+            <option value="closeness-top">Top-N nach Closeness-Zentralität</option>
+          </select>
+        </div>
+        <div id="algorithmDescription" class="algorithm-description">Wähle einen Algorithmus aus, um eine Kurzbeschreibung zu sehen.</div>
+        <div class="button-grid">
+          <div class="field compact">
+            <label for="topNInput">Top N</label>
+            <input id="topNInput" type="number" min="1" value="5" />
+          </div>
+          <div class="field compact">
+            <label for="weightDefaultInput">Standardgewicht</label>
+            <input id="weightDefaultInput" type="number" min="0.0001" step="0.1" value="1" />
+          </div>
+        </div>
+        <div class="button-grid">
+          <button id="runAlgorithmBtn" class="violet">Algorithmus ausführen</button>
+          <button id="isolateAlgorithmBtn" class="rose">Ergebnis isolieren</button>
+          <button id="clearAlgorithmBtn">Algorithmus-Ergebnis löschen</button>
+        </div>
+        <div id="algorithmResultInfo" class="algo-meta muted" style="margin-top:10px;">Noch kein Algorithmus ausgeführt.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Legende</h2>
+        <div class="legend">
+          <div class="legend-item"><span class="swatch" style="background:#60a5fa;"></span> Normaler Knoten</div>
+          <div class="legend-item"><span class="swatch" style="background:#fde68a;"></span> Ausgewählter Knoten</div>
+          <div class="legend-item"><span class="swatch" style="background:#34d399;"></span> Vorgänger-Markierung</div>
+          <div class="legend-item"><span class="swatch" style="background:#fb923c;"></span> Nachfolger-Markierung</div>
+          <div class="legend-item"><span class="swatch" style="background:#a78bfa;"></span> Kategorien-Filtertreffer</div>
+          <div class="legend-item"><span class="swatch" style="background:#38bdf8;"></span> Knotensuche-Treffer</div>
+          <div class="legend-item"><span class="swatch" style="background:#f472b6;"></span> Algorithmus-Ergebnis</div>
+          <div class="legend-item"><span class="swatch" style="background:#bef264;"></span> Isolationsfokus</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Bedienung</h2>
+        <ul class="help-list">
+          <li>Mausrad oder Touchpad zum Zoomen.</li>
+          <li>Freie Fläche ziehen zum Verschieben der Ansicht.</li>
+          <li>Knoten anklicken, dann Vorgänger, Nachfolger oder beides markieren; rekursiv optional mit Tiefe 1-5 oder alle.</li>
+          <li>Kanten anklicken, um Kantenkommentare oder Erklärungen aus <code>successor_details</code> bzw. der expliziten Kantenliste zu lesen.</li>
+          <li>Die Knotensuche durchsucht ID, Name, Kategorien und Beschreibung.</li>
+          <li>Der Kategorienfilter markiert passende Knoten, isoliert sie aber nicht automatisch.</li>
+          <li><strong>Fokus isolieren</strong> zeigt nur den aktuellen Fokus: ausgewählter Knoten, Markierungen, Filtertreffer und Algorithmus-Ergebnisse. Bei Schichten kannst du zuvor einzelne Layer farbig markieren und dann isolieren.</li>
+          <li><strong>Durchklick-Modus</strong> zeigt zunächst nur den aktuellen Knoten mit direkten Vorgängern und Nachfolgern. Beim Weiterklicken bleibt nur der aktive Pfad sichtbar. Die direkten Vorgänger und Nachfolger des aktuellen Fokus werden lokal neu und übersichtlich um diesen Fokus angeordnet.</li>
+          <li>Für gewichtete Algorithmen werden optionale Kantengewichte aus JSON verwendet; sonst das Standardgewicht.</li>
+        </ul>
+        <p class="footer-note">Empfohlenes JSON-Format: siehe separate Schema-Datei v4.5.</p>
+      </div>
+    </aside>
+
+    <main class="graph-wrap" id="graphWrap">
+      <div id="cy"></div>
+      <div class="drop-hint" id="dropHint">JSON hier ablegen</div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <script>
+    (() => {
+      const els = {
+        jsonFile: document.getElementById('jsonFile'),
+        nodeSearch: document.getElementById('nodeSearch'),
+        searchNodesBtn: document.getElementById('searchNodesBtn'),
+        clearSearchBtn: document.getElementById('clearSearchBtn'),
+        searchResultInfo: document.getElementById('searchResultInfo'),
+        toolbar: document.querySelector('.toolbar'),
+        categoryDropdownWrap: document.getElementById('categoryDropdownWrap'),
+        categorySearch: document.getElementById('categorySearch'),
+        categoryList: document.getElementById('categoryList'),
+        categorySummary: document.getElementById('categorySummary'),
+        filterModeSelect: document.getElementById('filterModeSelect'),
+        selectedCategoryChips: document.getElementById('selectedCategoryChips'),
+        applyFilterBtn: document.getElementById('applyFilterBtn'),
+        clearFilterBtn: document.getElementById('clearFilterBtn'),
+        recursiveToggle: document.getElementById('recursiveToggle'),
+        recursionDepthSelect: document.getElementById('recursionDepthSelect'),
+        showPredecessorsBtn: document.getElementById('showPredecessorsBtn'),
+        showSuccessorsBtn: document.getElementById('showSuccessorsBtn'),
+        showBothBtn: document.getElementById('showBothBtn'),
+        clearHighlightsBtn: document.getElementById('clearHighlightsBtn'),
+        isolateBtn: document.getElementById('isolateBtn'),
+        clearIsolationBtn: document.getElementById('clearIsolationBtn'),
+        relayoutBtn: document.getElementById('relayoutBtn'),
+        relayoutModeSelect: document.getElementById('relayoutModeSelect'),
+        fitBtn: document.getElementById('fitBtn'),
+        clickTraversalBtn: document.getElementById('clickTraversalBtn'),
+        clearClickTraversalBtn: document.getElementById('clearClickTraversalBtn'),
+        setSourceBtn: document.getElementById('setSourceBtn'),
+        setTargetBtn: document.getElementById('setTargetBtn'),
+        algorithmSourceSummary: document.getElementById('algorithmSourceSummary'),
+        algorithmTargetSummary: document.getElementById('algorithmTargetSummary'),
+        algorithmSelect: document.getElementById('algorithmSelect'),
+        algorithmDescription: document.getElementById('algorithmDescription'),
+        topNInput: document.getElementById('topNInput'),
+        weightDefaultInput: document.getElementById('weightDefaultInput'),
+        runAlgorithmBtn: document.getElementById('runAlgorithmBtn'),
+        isolateAlgorithmBtn: document.getElementById('isolateAlgorithmBtn'),
+        clearAlgorithmBtn: document.getElementById('clearAlgorithmBtn'),
+        algorithmResultInfo: document.getElementById('algorithmResultInfo'),
+        selectedNodeInfo: document.getElementById('selectedNodeInfo'),
+        selectedEdgeInfo: document.getElementById('selectedEdgeInfo'),
+        clickTraversalInfo: document.getElementById('clickTraversalInfo'),
+        statusMessage: document.getElementById('statusMessage'),
+        nodeCount: document.getElementById('nodeCount'),
+        edgeCount: document.getElementById('edgeCount'),
+        visibleNodeCount: document.getElementById('visibleNodeCount'),
+        categoryCount: document.getElementById('categoryCount'),
+        graphWrap: document.getElementById('graphWrap'),
+        dropHint: document.getElementById('dropHint')
+      };
+
+      const state = {
+        cy: null,
+        rawData: null,
+        warnings: [],
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        sourceNodeId: null,
+        targetNodeId: null,
+        selectedCategories: new Set(),
+        searchMatchedNodeIds: new Set(),
+        filterMatchedNodeIds: new Set(),
+        predNodeIds: new Set(),
+        predEdgeIds: new Set(),
+        succNodeIds: new Set(),
+        succEdgeIds: new Set(),
+        algorithmNodeIds: new Set(),
+        algorithmEdgeIds: new Set(),
+        algorithmSummary: '',
+        algorithmInfo: null,
+        topoSelectedLayerIndices: new Set(),
+        algorithmGroupSelectedIndices: new Set(),
+        isolationActive: false,
+        isolatedNodeIds: new Set(),
+        clickTraversalModeActive: false,
+        clickTraversalFocusId: null,
+        clickTraversalPathIds: [],
+        clickTraversalPathEdgeIds: new Set(),
+        clickTraversalRevealedNodeIds: new Set(),
+        clickTraversalRevealedEdgeIds: new Set(),
+        clickTraversalNeighborPredIds: new Set(),
+        clickTraversalNeighborPredEdgeIds: new Set(),
+        clickTraversalNeighborSuccIds: new Set(),
+        clickTraversalNeighborSuccEdgeIds: new Set(),
+        clickTraversalDimNodeIds: new Set(),
+        clickTraversalDimEdgeIds: new Set(),
+        allCategories: []
+      };
+
+      const TOPO_LAYER_COLORS = [
+        { fill: '#60a5fa', border: '#bfdbfe', buttonText: '#eff6ff' },
+        { fill: '#34d399', border: '#a7f3d0', buttonText: '#ecfdf5' },
+        { fill: '#f59e0b', border: '#fde68a', buttonText: '#fff7ed' },
+        { fill: '#f472b6', border: '#fbcfe8', buttonText: '#fff1f2' },
+        { fill: '#a78bfa', border: '#ddd6fe', buttonText: '#f5f3ff' },
+        { fill: '#22c55e', border: '#bbf7d0', buttonText: '#f0fdf4' },
+        { fill: '#fb7185', border: '#fecdd3', buttonText: '#fff1f2' },
+        { fill: '#2dd4bf', border: '#99f6e4', buttonText: '#f0fdfa' },
+        { fill: '#f97316', border: '#fed7aa', buttonText: '#fff7ed' },
+        { fill: '#84cc16', border: '#d9f99d', buttonText: '#f7fee7' }
+      ];
+
+      const algorithmDescriptions = {
+        'weak-component': `
+          <strong>Schwach verbundene Komponente</strong><br>
+          Betrachtet den sichtbaren Graphen so, als ob alle Kanten ungerichtet wären. Dadurch werden alle Knoten gefunden, die strukturell mit dem ausgewählten Knoten zusammenhängen, auch wenn die Pfeilrichtung das in einer Richtung eigentlich verhindern würde.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Markiert die gesamte „Insel“ des ausgewählten Knotens im sichtbaren Graphen. Nützlich, um getrennte Bereiche oder zusammenhängende Teilnetze schnell zu identifizieren.
+        `,
+        'strong-component': `
+          <strong>Starke Zusammenhangskomponente</strong><br>
+          Findet alle Knoten, die vom ausgewählten Knoten aus gerichtet erreichbar sind und von denen aus man auch wieder zurück zum Startknoten gelangen kann. Die Kantenrichtung wird hier vollständig respektiert.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Das Resultat zeigt einen Bereich mit gegenseitiger Erreichbarkeit. Solche Komponenten deuten oft auf Rückkopplungen, enge Abhängigkeiten oder Zyklen hin.
+        `,
+        'sources': `
+          <strong>Quellen</strong><br>
+          Sucht im aktuell sichtbaren Graphen nach Knoten ohne eingehende Kanten. Das sind Startpunkte, die von keinem anderen sichtbaren Knoten abhängen.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Markierte Knoten sind mögliche Einstiege, Ursprünge oder initiale Auslöser in einem Prozess- oder Abhängigkeitsgraphen.
+        `,
+        'sinks': `
+          <strong>Senken</strong><br>
+          Sucht im aktuell sichtbaren Graphen nach Knoten ohne ausgehende Kanten. Diese Knoten führen zu nichts Weiterem im sichtbaren Bereich.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Markierte Knoten sind Endpunkte, Resultate oder Abschlüsse eines Prozesses.
+        `,
+        'cycles': `
+          <strong>Knoten in Zyklen</strong><br>
+          Findet Knoten, die Teil mindestens eines gerichteten Zyklus sind. Ein Zyklus bedeutet, dass man über eine Folge gerichteter Kanten wieder zum Ausgangspunkt zurückkehren kann.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Das Resultat markiert Rückkopplungen, Schleifen oder potenziell problematische zirkuläre Abhängigkeiten.
+        `,
+        'topo': `
+          <strong>Topologische Ordnung / Schichten</strong><br>
+          Zerlegt einen azyklischen sichtbaren Graphen in Schichten. Frühere Schichten enthalten Knoten, deren Vorgänger bereits vollständig in früheren Schichten liegen. Bei Zyklen ist diese Zerlegung nicht eindeutig oder nicht möglich.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Die Schichten zeigen eine sinnvolle Verarbeitungs-, Bau- oder Abfolgeordnung. Nach dem Ausführen kannst du einzelne Schichten per Klick gezielt auswählen und vergleichen.
+        `,
+        'source-flow': `
+          <strong>Quellenbasierte Flow-Subgraphen</strong><br>
+          Eignet sich für gerichtete Graphen mit klarem Links-nach-rechts-Flow und vielen Quellen. Der Algorithmus betrachtet den sichtbaren Graphen als DAG, bestimmt alle Quellen und ordnet jeden Knoten einer dominanten Quelle zu. Dazu wird für jeden Knoten der „stärkste“ eingehende Fluss gewählt, hier vereinfacht als längster topologisch konsistenter Zuweisungspfad von einer Quelle. So entstehen geordnete Flow-Bereiche.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Jeder Bereich ist ein quellenbasierter Teilgraph mit natürlicher Reihenfolge. Zusätzlich wird pro Bereich ein Hauptpfad ausgewiesen, der den charakteristischen Verlauf von der Quelle in Richtung der tieferen Ebenen zeigt. Das ist nützlich, um große Lern- oder Abhängigkeitsgraphen in mehrere nachvollziehbare Stränge zu gliedern.
+        `,
+        'path-cover': `
+          <strong>Minimum Path Cover / Pfadzerlegung</strong><br>
+          Zerlegt einen azyklischen sichtbaren Graphen in möglichst wenige gerichtete Pfade, sodass alle Knoten von genau einem dieser Pfade abgedeckt werden. Intern wird dazu eine Maximum-Matching-Idee auf dem DAG genutzt.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Das Resultat zeigt die kleinste bekannte Menge an linearen Hauptpfaden, die den Graphen vollständig aufspannt. Das ist hilfreich, wenn du aus einem verzweigten Fluss mehrere „rote Fäden“ oder Lernketten ableiten willst.
+        `,
+        'longest-dag': `
+          <strong>Längster Pfad im DAG</strong><br>
+          Sucht im sichtbaren Graphen einen langen gerichteten Pfad unter der Annahme, dass der Graph ein DAG ist, also keine gerichteten Zyklen enthält.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Das Resultat zeigt eine besonders lange Abhängigkeits- oder Verarbeitungskette. In Projekt- oder Pipeline-Strukturen entspricht das oft einem kritischen Pfad.
+        `,
+        'shortest-path': `
+          <strong>Kürzester Pfad von Quelle nach Ziel</strong><br>
+          Berechnet den kostengünstigsten gerichteten Weg von der gesetzten Quelle zum gesetzten Ziel. Verwendet werden Kantengewichte aus der JSON, sonst das Standardgewicht.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Markiert wird die beste aktuell bekannte Route zwischen zwei konkreten Knoten. Das Ergebnis enthält den Pfad und seine Gesamtkosten.
+        `,
+        'shortest-tree': `
+          <strong>Kürzeste-Wege-Baum ab Quelle</strong><br>
+          Berechnet von einer gesetzten Quelle zu allen erreichbaren sichtbaren Knoten jeweils den aktuell günstigsten Weg und fasst diese Wege als Baum bzw. Wald zusammen.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Markiert werden die Kanten, über die man ausgehend von der Quelle alle erreichbaren Knoten am effizientesten erreicht.
+        `,
+        'mst': `
+          <strong>Minimaler Spannbaum / Spannwald</strong><br>
+          Interpretiert den sichtbaren Graphen ungerichtet und verbindet alle erreichbaren Knoten mit minimalen Gesamtkosten. Bei mehreren getrennten Komponenten entsteht ein Spannwald.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Das Resultat zeigt eine kostenarme Grundverbindung ohne unnötige Zusatzkanten. Für einen gerichteten Graphen ist das eine vereinfachende, ungerichtete Sicht.
+        `,
+        'pagerank': `
+          <strong>PageRank Top-N</strong><br>
+          Bewertet Knoten danach, wie wichtig sie strukturell im Netzwerk sind. Ein Knoten gewinnt an Gewicht, wenn wichtige Knoten auf ihn verweisen.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Markiert werden die im Netzwerk einflussreichsten oder prominentesten Knoten nach diesem Ranking-Verfahren.
+        `,
+        'degree-top': `
+          <strong>Top-N nach Grad</strong><br>
+          Sortiert Knoten nach Anzahl ihrer ein- und ausgehenden Kanten im sichtbaren Graphen.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Das Resultat hebt stark vernetzte Knoten hervor. Diese sind oft Hubs, Sammelpunkte oder zentrale Verteiler.
+        `,
+        'betweenness-top': `
+          <strong>Top-N nach Betweenness-Zentralität</strong><br>
+          Bewertet Knoten danach, wie häufig sie auf kürzesten Wegen zwischen anderen Knoten liegen.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Hohe Werte deuten auf Vermittler, Brücken oder Engpässe hin, über die viele Verbindungen laufen.
+        `,
+        'closeness-top': `
+          <strong>Top-N nach Closeness-Zentralität</strong><br>
+          Bewertet Knoten danach, wie nahe sie im Mittel an vielen anderen Knoten liegen, also wie schnell sie andere Bereiche erreichen können.<br><br>
+          <strong>Ergebnisbedeutung:</strong> Markiert werden Knoten mit kurzer durchschnittlicher Distanz zu vielen anderen Knoten. Sie eignen sich oft als günstige Start- oder Koordinationspunkte.
+        `
+      };
+
+      function setStatus(message, isError = false) {
+        els.statusMessage.textContent = message;
+        els.statusMessage.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function normalizeCategory(value) {
+        return String(value || '').trim().toLowerCase();
+      }
+
+      function parseNumber(value, fallback) {
+        const num = Number(value);
+        return Number.isFinite(num) && num > 0 ? num : fallback;
+      }
+
+      function getTopoLayerColor(index) {
+        return TOPO_LAYER_COLORS[index % TOPO_LAYER_COLORS.length];
+      }
+
+      function getTopoLayerButtonStyle(index, isActive) {
+        const color = getTopoLayerColor(index);
+        return [
+          `background:${isActive ? color.fill : 'rgba(15, 23, 42, 0.82)'}`,
+          `border-color:${color.border}`,
+          `color:${isActive ? '#0f172a' : color.buttonText}`,
+          isActive ? `box-shadow:0 0 0 3px ${color.border}33` : ''
+        ].filter(Boolean).join(';');
+      }
+
+      function parseRecursionDepth() {
+        const raw = String(els.recursionDepthSelect?.value || 'all');
+        if (raw === 'all') return Infinity;
+        const depth = Number(raw);
+        return Number.isInteger(depth) && depth >= 1 ? depth : Infinity;
+      }
+
+      function getRecursionDepthLabel() {
+        const depth = parseRecursionDepth();
+        return Number.isFinite(depth) ? `Tiefe ${depth}` : 'alle Tiefen';
+      }
+
+      function setRecursiveUiState() {
+        const enabled = !!els.recursiveToggle.checked;
+        if (els.recursionDepthSelect) {
+          els.recursionDepthSelect.disabled = !enabled;
+          els.recursionDepthSelect.style.opacity = enabled ? '1' : '0.65';
+        }
+      }
+
+      function getAllNodes() {
+        return state.cy ? state.cy.nodes() : cytoscape([]);
+      }
+
+      function getWorkingNodes() {
+        return state.cy ? state.cy.nodes().not('.isolated-out') : cytoscape([]);
+      }
+
+      function getWorkingEdges() {
+        return state.cy ? state.cy.edges().not('.isolated-out') : cytoscape([]);
+      }
+
+      function getDisplayedNodes() {
+        return state.cy ? state.cy.nodes().not('.isolated-out, .click-hidden') : cytoscape([]);
+      }
+
+      function getDisplayedEdges() {
+        return state.cy ? state.cy.edges().not('.isolated-out, .click-hidden') : cytoscape([]);
+      }
+
+      function getFitTargetNodes() {
+        if (!state.cy) return null;
+        const displayedNodes = getDisplayedNodes();
+        if (displayedNodes.length) return displayedNodes;
+        const workingNodes = getWorkingNodes();
+        return workingNodes.length ? workingNodes : state.cy.nodes();
+      }
+
+      function fitCurrentView(padding = 40) {
+        if (!state.cy) return false;
+        const nodes = getFitTargetNodes();
+        if (!nodes || !nodes.length) return false;
+
+        const bb = nodes.boundingBox({ includeLabels: true, includeOverlays: false });
+        const cyWidth = Math.max(state.cy.width(), 1);
+        const cyHeight = Math.max(state.cy.height(), 1);
+        const safePadding = Math.max(10, padding);
+        const topPadding = safePadding + 8;
+
+        if (![bb.x1, bb.y1, bb.x2, bb.y2, bb.w, bb.h].every(Number.isFinite)) {
+          state.cy.fit(nodes, safePadding);
+          if (els.graphWrap && typeof window !== 'undefined') {
+            const toolbarHeight = els.toolbar ? els.toolbar.getBoundingClientRect().height : 0;
+            const top = Math.max(0, els.graphWrap.getBoundingClientRect().top + window.scrollY - toolbarHeight - 8);
+            window.scrollTo({ top, behavior: 'smooth' });
+          }
+          return true;
+        }
+
+        const width = Math.max(bb.w, 1);
+        const height = Math.max(bb.h, 1);
+        const zoomX = (cyWidth - safePadding * 2) / width;
+        const zoomY = (cyHeight - topPadding - safePadding) / height;
+        let zoom = Math.min(zoomX, zoomY);
+        if (!Number.isFinite(zoom) || zoom <= 0) {
+          state.cy.fit(nodes, safePadding);
+          if (els.graphWrap && typeof window !== 'undefined') {
+            const toolbarHeight = els.toolbar ? els.toolbar.getBoundingClientRect().height : 0;
+            const top = Math.max(0, els.graphWrap.getBoundingClientRect().top + window.scrollY - toolbarHeight - 8);
+            window.scrollTo({ top, behavior: 'smooth' });
+          }
+          return true;
+        }
+
+        const minZoom = typeof state.cy.minZoom === 'function' ? state.cy.minZoom() : 1e-6;
+        const maxZoom = typeof state.cy.maxZoom === 'function' ? state.cy.maxZoom() : 1e6;
+        zoom = Math.max(minZoom, Math.min(maxZoom, zoom));
+
+        const centerX = (bb.x1 + bb.x2) / 2;
+        const pan = {
+          x: cyWidth / 2 - centerX * zoom,
+          y: topPadding - bb.y1 * zoom
+        };
+
+        if (!Number.isFinite(pan.x) || !Number.isFinite(pan.y)) {
+          state.cy.fit(nodes, safePadding);
+          if (els.graphWrap && typeof window !== 'undefined') {
+            const toolbarHeight = els.toolbar ? els.toolbar.getBoundingClientRect().height : 0;
+            const top = Math.max(0, els.graphWrap.getBoundingClientRect().top + window.scrollY - toolbarHeight - 8);
+            window.scrollTo({ top, behavior: 'smooth' });
+          }
+          return true;
+        }
+
+        state.cy.zoom(zoom);
+        state.cy.pan(pan);
+
+        if (els.graphWrap && typeof window !== 'undefined') {
+          const toolbarHeight = els.toolbar ? els.toolbar.getBoundingClientRect().height : 0;
+          const top = Math.max(0, els.graphWrap.getBoundingClientRect().top + window.scrollY - toolbarHeight - 8);
+          window.scrollTo({ top, behavior: 'smooth' });
+        }
+
+        return true;
+      }
+
+      function getSelectedNode() {
+        if (!state.cy || !state.selectedNodeId) return null;
+        const node = state.cy.getElementById(state.selectedNodeId);
+        return node && node.nonempty() ? node : null;
+      }
+
+      function getNodeById(id) {
+        if (!state.cy || !id) return null;
+        const node = state.cy.getElementById(id);
+        return node && node.nonempty() ? node : null;
+      }
+
+      function getVisibleIncomingEdges(node) {
+        if (!node || node.empty()) return state.cy ? state.cy.collection() : cytoscape([]);
+        return node.connectedEdges().filter(edge => edge.target().id() === node.id() && !edge.hasClass('isolated-out'));
+      }
+
+      function getVisibleOutgoingEdges(node) {
+        if (!node || node.empty()) return state.cy ? state.cy.collection() : cytoscape([]);
+        return node.connectedEdges().filter(edge => edge.source().id() === node.id() && !edge.hasClass('isolated-out'));
+      }
+
+
+      function hasActiveCategoryFilter() {
+        return state.selectedCategories && state.selectedCategories.size > 0;
+      }
+
+      function nodeMatchesActiveCategoryFilter(node) {
+        if (!node || node.empty()) return false;
+        if (!hasActiveCategoryFilter()) return true;
+        const categories = (node.data('categories') || []).map(normalizeCategory);
+        const selectedNorms = [...state.selectedCategories];
+        const filterMode = getCurrentFilterMode();
+        return filterMode === 'or'
+          ? selectedNorms.some(filterCat => categories.includes(filterCat))
+          : selectedNorms.every(filterCat => categories.includes(filterCat));
+      }
+
+      function edgeMatchesActiveCategoryFilter(edge) {
+        if (!edge || edge.empty()) return false;
+        if (!hasActiveCategoryFilter()) return true;
+        return nodeMatchesActiveCategoryFilter(edge.source()) && nodeMatchesActiveCategoryFilter(edge.target());
+      }
+
+      function getAvailableIncomingEdges(node) {
+        const edges = getVisibleIncomingEdges(node);
+        if (!state.clickTraversalModeActive || !hasActiveCategoryFilter()) return edges;
+        return edges.filter(edge => edgeMatchesActiveCategoryFilter(edge));
+      }
+
+      function getAvailableOutgoingEdges(node) {
+        const edges = getVisibleOutgoingEdges(node);
+        if (!state.clickTraversalModeActive || !hasActiveCategoryFilter()) return edges;
+        return edges.filter(edge => edgeMatchesActiveCategoryFilter(edge));
+      }
+
+      function directPredecessorNodes(node) {
+        return getVisibleIncomingEdges(node).sources().intersection(getWorkingNodes());
+      }
+
+      function directSuccessorNodes(node) {
+        return getVisibleOutgoingEdges(node).targets().intersection(getWorkingNodes());
+      }
+
+      function clearHighlightState() {
+        state.predNodeIds.clear();
+        state.predEdgeIds.clear();
+        state.succNodeIds.clear();
+        state.succEdgeIds.clear();
+      }
+
+      function clearAlgorithmState() {
+        state.algorithmNodeIds.clear();
+        state.algorithmEdgeIds.clear();
+        state.algorithmSummary = '';
+        state.algorithmInfo = null;
+        state.topoSelectedLayerIndices.clear();
+        state.algorithmGroupSelectedIndices.clear();
+      }
+
+      function updateSelectedNodeInfo(node) {
+        if (!node) {
+          els.selectedNodeInfo.className = 'node-meta muted';
+          els.selectedNodeInfo.textContent = 'Kein Knoten ausgewählt.';
+          return;
+        }
+
+        const categories = node.data('categories') || [];
+        const description = node.data('description') || '–';
+        const successorIds = directSuccessorNodes(node).map(n => n.id());
+        const predecessorIds = directPredecessorNodes(node).map(n => n.id());
+
+        els.selectedNodeInfo.className = 'node-meta';
+        els.selectedNodeInfo.innerHTML = `
+          <div><strong>Name:</strong> ${escapeHtml(node.data('label') || node.id())}</div>
+          <div><strong>ID:</strong> <code>${escapeHtml(node.id())}</code></div>
+          <div><strong>Kategorien:</strong>
+            <div class="badges">${categories.length ? categories.map(cat => `<span class="badge">${escapeHtml(cat)}</span>`).join('') : '<span class="muted">keine</span>'}</div>
+          </div>
+          <div><strong>Beschreibung:</strong><br>${escapeHtml(description)}</div>
+          <div><strong>Direkte Vorgänger:</strong> ${predecessorIds.length ? predecessorIds.map(id => `<code>${escapeHtml(id)}</code>`).join(' ') : '<span class="muted">keine</span>'}</div>
+          <div><strong>Direkte Nachfolger:</strong> ${successorIds.length ? successorIds.map(id => `<code>${escapeHtml(id)}</code>`).join(' ') : '<span class="muted">keine</span>'}</div>
+        `;
+      }
+
+
+      function getEdgeExplanation(edge) {
+        if (!edge) return '';
+        return String(
+          edge.data('description')
+          || edge.data('reason')
+          || edge.data('comment')
+          || edge.data('explanation')
+          || ''
+        ).trim();
+      }
+
+
+      function updateSelectedEdgeInfo(edge) {
+        if (!edge) {
+          els.selectedEdgeInfo.className = 'node-meta muted';
+          els.selectedEdgeInfo.textContent = 'Keine Kante ausgewählt.';
+          return;
+        }
+
+        const source = edge.source();
+        const target = edge.target();
+        const sourceLabel = source ? (source.data('label') || source.id()) : edge.data('source');
+        const targetLabel = target ? (target.data('label') || target.id()) : edge.data('target');
+        const weight = edge.data('weight');
+        const label = edge.data('label') || '';
+        const explanation = getEdgeExplanation(edge);
+
+        els.selectedEdgeInfo.className = 'node-meta';
+        els.selectedEdgeInfo.innerHTML = `
+          <div><strong>ID:</strong> <code>${escapeHtml(edge.id())}</code></div>
+          <div><strong>Von:</strong> ${escapeHtml(sourceLabel)} <code>${escapeHtml(edge.data('source'))}</code></div>
+          <div><strong>Nach:</strong> ${escapeHtml(targetLabel)} <code>${escapeHtml(edge.data('target'))}</code></div>
+          ${label ? `<div><strong>Label:</strong> ${escapeHtml(label)}</div>` : ''}
+          <div><strong>Gewicht:</strong> ${escapeHtml(String(weight ?? 1))}</div>
+          <div><strong>Kommentar / Erklärung:</strong><br>${explanation ? escapeHtml(explanation) : '<span class="muted">Keine Kantenbeschreibung vorhanden.</span>'}</div>
+        `;
+      }
+
+      function clearClickTraversalState() {
+        state.clickTraversalModeActive = false;
+        state.clickTraversalFocusId = null;
+        state.clickTraversalPathIds = [];
+        state.clickTraversalPathEdgeIds.clear();
+        state.clickTraversalRevealedNodeIds.clear();
+        state.clickTraversalRevealedEdgeIds.clear();
+        state.clickTraversalNeighborPredIds.clear();
+        state.clickTraversalNeighborPredEdgeIds.clear();
+        state.clickTraversalNeighborSuccIds.clear();
+        state.clickTraversalNeighborSuccEdgeIds.clear();
+        state.clickTraversalDimNodeIds.clear();
+        state.clickTraversalDimEdgeIds.clear();
+      }
+
+      function getClickTraversalNeighborContext(node) {
+        const predecessorNodeIds = new Set();
+        const predecessorEdgeIds = new Set();
+        const successorNodeIds = new Set();
+        const successorEdgeIds = new Set();
+
+        getAvailableIncomingEdges(node).forEach(edge => {
+          predecessorNodeIds.add(edge.source().id());
+          predecessorEdgeIds.add(edge.id());
+        });
+
+        getAvailableOutgoingEdges(node).forEach(edge => {
+          successorNodeIds.add(edge.target().id());
+          successorEdgeIds.add(edge.id());
+        });
+
+        return {
+          predecessorNodeIds,
+          predecessorEdgeIds,
+          successorNodeIds,
+          successorEdgeIds,
+          contextNodeIds: new Set([node.id(), ...predecessorNodeIds, ...successorNodeIds]),
+          contextEdgeIds: new Set([...predecessorEdgeIds, ...successorEdgeIds])
+        };
+      }
+
+      function getClickTraversalStepEdgeIds(fromId, toId) {
+        if (!state.cy) return [];
+        const forward = state.cy.edges().filter(edge =>
+          edge.source().id() === fromId
+          && edge.target().id() === toId
+          && !edge.hasClass('isolated-out')
+          && (!hasActiveCategoryFilter() || edgeMatchesActiveCategoryFilter(edge)));
+        if (forward.length) return forward.map(edge => edge.id());
+        const backward = state.cy.edges().filter(edge =>
+          edge.source().id() === toId
+          && edge.target().id() === fromId
+          && !edge.hasClass('isolated-out')
+          && (!hasActiveCategoryFilter() || edgeMatchesActiveCategoryFilter(edge)));
+        return backward.map(edge => edge.id());
+      }
+
+      function rebuildClickTraversalPathEdgeIds() {
+        state.clickTraversalPathEdgeIds.clear();
+        for (let i = 1; i < state.clickTraversalPathIds.length; i += 1) {
+          const fromId = state.clickTraversalPathIds[i - 1];
+          const toId = state.clickTraversalPathIds[i];
+          getClickTraversalStepEdgeIds(fromId, toId).forEach(edgeId => state.clickTraversalPathEdgeIds.add(edgeId));
+        }
+      }
+
+      function refreshClickTraversalDerivedSets(focusNodeId) {
+        const node = getNodeById(focusNodeId);
+        if (!node) return;
+        const context = getClickTraversalNeighborContext(node);
+
+        state.clickTraversalNeighborPredIds = new Set(context.predecessorNodeIds);
+        state.clickTraversalNeighborPredEdgeIds = new Set(context.predecessorEdgeIds);
+        state.clickTraversalNeighborSuccIds = new Set(context.successorNodeIds);
+        state.clickTraversalNeighborSuccEdgeIds = new Set(context.successorEdgeIds);
+
+        state.clickTraversalRevealedNodeIds = new Set([
+          ...state.clickTraversalPathIds,
+          focusNodeId,
+          ...state.clickTraversalNeighborPredIds,
+          ...state.clickTraversalNeighborSuccIds
+        ]);
+
+        state.clickTraversalRevealedEdgeIds = new Set([
+          ...state.clickTraversalPathEdgeIds,
+          ...state.clickTraversalNeighborPredEdgeIds,
+          ...state.clickTraversalNeighborSuccEdgeIds
+        ]);
+
+        state.clickTraversalDimNodeIds = new Set();
+        state.clickTraversalDimEdgeIds = new Set();
+      }
+
+      function getNodeLayoutSize(node) {
+        const label = String(node?.data?.('label') || node?.id?.() || '');
+        const width = Math.max(150, Math.min(320, 28 + label.length * 7.2));
+        const height = 58;
+        return { width, height };
+      }
+
+      function computeVerticalPositions(nodeIds, centerY, baseGap, focusId = null) {
+        const ids = [...nodeIds].filter(Boolean);
+        if (!ids.length) return new Map();
+
+        const items = ids.map(id => {
+          const node = getNodeById(id);
+          const size = node ? getNodeLayoutSize(node) : { width: 180, height: 58 };
+          return { id, height: size.height };
+        });
+
+        const focusIndex = focusId ? items.findIndex(item => item.id === focusId) : -1;
+        if (focusIndex > 0) {
+          const [focusItem] = items.splice(focusIndex, 1);
+          items.unshift(focusItem);
+        }
+
+        const totalHeight = items.reduce((sum, item) => sum + item.height, 0) + Math.max(0, items.length - 1) * baseGap;
+        let cursor = centerY - totalHeight / 2;
+        const positions = new Map();
+        items.forEach(item => {
+          cursor += item.height / 2;
+          positions.set(item.id, cursor);
+          cursor += item.height / 2 + baseGap;
+        });
+        return positions;
+      }
+
+      function applyClickTraversalLayout(options = {}) {
+        if (!state.cy || !state.clickTraversalModeActive || !state.clickTraversalFocusId) return;
+
+        const normalizedOptions = (typeof options === 'boolean')
+          ? { fit: options }
+          : (options || {});
+        const fit = Boolean(normalizedOptions.fit);
+        const preserveFocusPosition = normalizedOptions.preserveFocusPosition !== false;
+
+        const focusNode = getNodeById(state.clickTraversalFocusId);
+        if (!focusNode) return;
+
+        const currentFocusPosition = focusNode.position();
+        const pathIds = [...state.clickTraversalPathIds];
+        const predecessorIds = [...state.clickTraversalNeighborPredIds].filter(id => !pathIds.includes(id));
+        const successorIds = [...state.clickTraversalNeighborSuccIds].filter(id => !pathIds.includes(id));
+        const previousPathIds = pathIds.slice(0, -1);
+
+        const focusSize = getNodeLayoutSize(focusNode);
+        const predecessorMaxWidth = predecessorIds.length
+          ? Math.max(...predecessorIds.map(id => getNodeLayoutSize(getNodeById(id)).width))
+          : 0;
+        const successorMaxWidth = successorIds.length
+          ? Math.max(...successorIds.map(id => getNodeLayoutSize(getNodeById(id)).width))
+          : 0;
+        const previousPathMaxWidth = previousPathIds.length
+          ? Math.max(...previousPathIds.map(id => getNodeLayoutSize(getNodeById(id)).width))
+          : 0;
+
+        const localXGap = Math.max(180, focusSize.width * 0.72);
+        const pathXGap = Math.max(240, previousPathMaxWidth * 0.9 + focusSize.width * 0.45);
+        const verticalGap = 28;
+        const defaultOriginX = 80 + Math.max(0, previousPathIds.length - 1) * pathXGap + Math.max(0, predecessorMaxWidth * 0.15);
+        const defaultOriginY = Math.max(state.cy.height() / 2, 220);
+        const originX = preserveFocusPosition && Number.isFinite(currentFocusPosition.x) ? currentFocusPosition.x : defaultOriginX;
+        const originY = preserveFocusPosition && Number.isFinite(currentFocusPosition.y) ? currentFocusPosition.y : defaultOriginY;
+
+        const positions = new Map();
+        positions.set(focusNode.id(), { x: originX, y: originY });
+
+        previousPathIds.forEach((id, index) => {
+          const distanceFromFocus = previousPathIds.length - index;
+          positions.set(id, {
+            x: originX - distanceFromFocus * pathXGap,
+            y: originY
+          });
+        });
+
+        const predY = computeVerticalPositions(predecessorIds, originY, verticalGap);
+        predecessorIds.forEach(id => {
+          positions.set(id, {
+            x: originX - localXGap,
+            y: predY.get(id) ?? originY
+          });
+        });
+
+        const succY = computeVerticalPositions(successorIds, originY, verticalGap);
+        successorIds.forEach(id => {
+          positions.set(id, {
+            x: originX + localXGap,
+            y: succY.get(id) ?? originY
+          });
+        });
+
+        positions.forEach((pos, id) => {
+          const node = getNodeById(id);
+          if (node && node.nonempty()) node.position(pos);
+        });
+
+        if (fit) fitCurrentView(70);
+      }
+
+      function renderClickTraversalInfo() {
+        if (!els.clickTraversalInfo) return;
+
+        if (!state.clickTraversalModeActive || !state.clickTraversalFocusId) {
+          els.clickTraversalInfo.className = 'node-meta muted';
+          els.clickTraversalInfo.textContent = 'Durchklick-Modus ist aus. Wähle einen Knoten und starte den Modus, um nur den aktiven Pfad sowie die direkten Vorgänger und Nachfolger des aktuellen Fokus lokal anzuzeigen.';
+          return;
+        }
+
+        const focusNode = getNodeById(state.clickTraversalFocusId);
+        const focusLabel = focusNode ? (focusNode.data('label') || focusNode.id()) : state.clickTraversalFocusId;
+        const pathHtml = state.clickTraversalPathIds.length
+          ? state.clickTraversalPathIds.map(id => {
+              const node = getNodeById(id);
+              const label = node ? (node.data('label') || id) : id;
+              return `<span class="click-path-node"><code>${escapeHtml(id)}</code> ${escapeHtml(label)}</span>`;
+            }).join(' &rarr; ')
+          : '<span class="muted">noch kein Pfad</span>';
+
+        const predSummary = [...state.clickTraversalNeighborPredIds].slice(0, 12).map(id => `<span class="click-mode-chip"><code>${escapeHtml(id)}</code></span>`).join('');
+        const succSummary = [...state.clickTraversalNeighborSuccIds].slice(0, 12).map(id => `<span class="click-mode-chip"><code>${escapeHtml(id)}</code></span>`).join('');
+
+        els.clickTraversalInfo.className = 'node-meta';
+        els.clickTraversalInfo.innerHTML = `
+          <div><strong>Aktiver Fokus:</strong> ${escapeHtml(focusLabel)} <code>${escapeHtml(state.clickTraversalFocusId)}</code></div>
+          <div><strong>Sichtbare Knoten:</strong> ${state.clickTraversalRevealedNodeIds.size}</div>
+          <div><strong>Pfadlänge:</strong> ${Math.max(0, state.clickTraversalPathIds.length - 1)} Schritt(e)</div>
+          <div class="click-path-line"><strong>Aktueller Klickpfad:</strong><br>${pathHtml}</div>
+          <div style="margin-top:8px;"><strong>Direkte Vorgänger des Fokus:</strong><br>${predSummary || '<span class="muted">keine</span>'}</div>
+          <div style="margin-top:8px;"><strong>Direkte Nachfolger des Fokus:</strong><br>${succSummary || '<span class="muted">keine</span>'}</div>
+          <div class="click-mode-hint">Im Durchklick-Modus kannst du den aktuellen Fokus, seine direkten Vorgänger, seine direkten Nachfolger oder bereits im Pfad liegende Knoten anklicken. Es bleibt nur der aktive Pfad sichtbar; die direkten Vorgänger werden links und die direkten Nachfolger rechts des Fokus neu angeordnet. Ist ein Kategorienfilter aktiv, erscheinen hier nur Knoten, die diesem Filter entsprechen.</div>
+        `;
+      }
+
+      function syncClickTraversalButtons() {
+        if (!els.clickTraversalBtn || !els.clearClickTraversalBtn) return;
+        els.clickTraversalBtn.textContent = state.clickTraversalModeActive ? 'Durchklick-Fokus neu setzen' : 'Durchklick-Modus starten';
+        els.clearClickTraversalBtn.disabled = !state.clickTraversalModeActive;
+        els.clearClickTraversalBtn.style.opacity = state.clickTraversalModeActive ? '1' : '0.65';
+      }
+
+      function startClickTraversalMode(startNode) {
+        if (!state.cy) return;
+        const node = startNode || getSelectedNode() || getWorkingNodes()[0];
+        if (!node || !node.nonempty()) {
+          setStatus('Bitte zuerst einen Knoten auswählen, um den Durchklick-Modus zu starten.', true);
+          return;
+        }
+        if (hasActiveCategoryFilter() && !nodeMatchesActiveCategoryFilter(node)) {
+          setStatus('Der Durchklick-Modus respektiert den aktiven Kategorienfilter. Bitte wähle einen Knoten, der dem Filter entspricht, oder passe den Filter an.', true);
+          return;
+        }
+
+        state.selectedNodeId = node.id();
+        state.selectedEdgeId = null;
+        state.isolationActive = false;
+        state.isolatedNodeIds.clear();
+        clearClickTraversalState();
+
+        state.clickTraversalModeActive = true;
+        state.clickTraversalFocusId = node.id();
+        state.clickTraversalPathIds = [node.id()];
+        state.clickTraversalRevealedNodeIds.add(node.id());
+
+        rebuildClickTraversalPathEdgeIds();
+        refreshClickTraversalDerivedSets(node.id());
+        refreshVisualClasses();
+        applyClickTraversalLayout({ fit: true, preserveFocusPosition: false });
+        updateSelectedNodeInfo(node);
+        updateSelectedEdgeInfo(null);
+        renderClickTraversalInfo();
+        syncClickTraversalButtons();
+        setStatus(`Durchklick-Modus gestartet. Fokus ist „${node.data('label') || node.id()}“.`);
+      }
+
+      function stopClickTraversalMode() {
+        const wasActive = state.clickTraversalModeActive;
+        clearClickTraversalState();
+        refreshVisualClasses();
+        renderClickTraversalInfo();
+        syncClickTraversalButtons();
+        if (wasActive) {
+          fitCurrentView(40);
+          setStatus('Durchklick-Modus beendet. Der bisherige Graphzustand bleibt erhalten.');
+        }
+      }
+
+      function handleClickTraversalNodeTap(node) {
+        if (!state.clickTraversalModeActive) return false;
+        if (!node || !node.nonempty()) return false;
+
+        const nodeId = node.id();
+        const currentFocusId = state.clickTraversalFocusId;
+
+        const isCurrentFocus = nodeId === currentFocusId;
+        const isPredNeighbor = state.clickTraversalNeighborPredIds.has(nodeId);
+        const isSuccNeighbor = state.clickTraversalNeighborSuccIds.has(nodeId);
+        const pathIndex = state.clickTraversalPathIds.indexOf(nodeId);
+        const isPathNode = pathIndex !== -1;
+
+        if (!(isCurrentFocus || isPredNeighbor || isSuccNeighbor || isPathNode)) {
+          const label = node.data('label') || nodeId;
+          setStatus(`„${label}“ ist im Durchklick-Modus aktuell kein direkt anwählbarer Knoten. Wähle den Fokus, einen direkten Vorgänger, einen direkten Nachfolger oder einen bereits im Pfad liegenden Knoten.`, true);
+          return true;
+        }
+
+        if (isPathNode && !isCurrentFocus) {
+          state.clickTraversalPathIds = state.clickTraversalPathIds.slice(0, pathIndex + 1);
+        } else if (!isCurrentFocus) {
+          state.clickTraversalPathIds.push(nodeId);
+        }
+
+        state.clickTraversalFocusId = nodeId;
+        state.selectedNodeId = nodeId;
+        state.selectedEdgeId = null;
+        rebuildClickTraversalPathEdgeIds();
+        refreshClickTraversalDerivedSets(nodeId);
+        refreshVisualClasses();
+        applyClickTraversalLayout({ fit: false, preserveFocusPosition: true });
+        updateSelectedNodeInfo(node);
+        updateSelectedEdgeInfo(null);
+        renderClickTraversalInfo();
+
+        const actionLabel = isPathNode && !isCurrentFocus ? 'im Pfad zurückgesprungen' : 'Fokus erweitert';
+        setStatus(`Durchklick-Modus: ${actionLabel} auf „${node.data('label') || nodeId}“.`);
+        return true;
+      }
+
+
+      function updateSearchResultInfo(message) {
+        els.searchResultInfo.textContent = message || 'Noch keine Knotensuche ausgeführt.';
+      }
+
+      function updateAlgorithmDescription() {
+        const selection = els.algorithmSelect.value;
+        els.algorithmDescription.innerHTML = algorithmDescriptions[selection] || 'Keine Beschreibung verfügbar.';
+      }
+
+      function updateAlgorithmSummaryBox(text, extraHtml = '') {
+        if (!text) {
+          els.algorithmResultInfo.className = 'algo-meta muted';
+          els.algorithmResultInfo.textContent = 'Noch kein Algorithmus ausgeführt.';
+          return;
+        }
+        els.algorithmResultInfo.className = 'algo-meta';
+        els.algorithmResultInfo.innerHTML = `<div>${text}</div>${extraHtml}`;
+      }
+
+      function updateSourceTargetSummaries() {
+        const source = getNodeById(state.sourceNodeId);
+        const target = getNodeById(state.targetNodeId);
+        els.algorithmSourceSummary.innerHTML = source ? `Quelle: <strong>${escapeHtml(source.data('label'))}</strong> <code>${escapeHtml(source.id())}</code>` : 'Quelle: keine';
+        els.algorithmTargetSummary.innerHTML = target ? `Ziel: <strong>${escapeHtml(target.data('label'))}</strong> <code>${escapeHtml(target.id())}</code>` : 'Ziel: keine';
+      }
+
+      function getAllCategories() {
+        const cats = new Set();
+        getAllNodes().forEach(node => {
+          (node.data('categories') || []).forEach(cat => cats.add(String(cat)));
+        });
+        return [...cats].sort((a, b) => a.localeCompare(b, 'de', { sensitivity: 'base' }));
+      }
+
+      function getCurrentFilterMode() {
+        return (els.filterModeSelect && els.filterModeSelect.value === 'or') ? 'or' : 'and';
+      }
+
+      function getCurrentRelayoutMode() {
+        return (els.relayoutModeSelect && els.relayoutModeSelect.value === 'flow') ? 'flow' : 'compact';
+      }
+
+      function updateCategorySummary() {
+        const count = state.selectedCategories.size;
+        const filterModeLabel = getCurrentFilterMode().toUpperCase();
+        if (!count) {
+          els.categorySummary.textContent = `Keine Kategorien ausgewählt. Filterart: ${filterModeLabel}.`;
+        } else {
+          els.categorySummary.textContent = `${count} Kategorie${count === 1 ? '' : 'n'} ausgewählt (${filterModeLabel}-Filter).`;
+        }
+
+        els.selectedCategoryChips.innerHTML = '';
+        [...state.selectedCategories].sort().forEach(catNorm => {
+          const original = state.allCategories.find(cat => normalizeCategory(cat) === catNorm) || catNorm;
+          const chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.innerHTML = `${escapeHtml(original)} <button type="button" data-cat="${escapeHtml(catNorm)}">×</button>`;
+          els.selectedCategoryChips.appendChild(chip);
+        });
+      }
+
+      function renderCategoryDropdown() {
+        const search = normalizeCategory(els.categorySearch.value);
+        els.categoryList.innerHTML = '';
+        state.allCategories.forEach(category => {
+          const norm = normalizeCategory(category);
+          const item = document.createElement('label');
+          item.className = 'category-item';
+          if (search && !norm.includes(search)) item.classList.add('hidden');
+          item.innerHTML = `
+            <input type="checkbox" data-category="${escapeHtml(norm)}" ${state.selectedCategories.has(norm) ? 'checked' : ''} />
+            <span>${escapeHtml(category)}</span>
+          `;
+          els.categoryList.appendChild(item);
+        });
+        updateCategorySummary();
+      }
+
+      function updateStats() {
+        if (!state.cy) {
+          els.nodeCount.textContent = '0';
+          els.edgeCount.textContent = '0';
+          els.visibleNodeCount.textContent = '0';
+          els.categoryCount.textContent = '0';
+          return;
+        }
+
+        els.nodeCount.textContent = String(state.cy.nodes().length);
+        els.edgeCount.textContent = String(state.cy.edges().length);
+        els.visibleNodeCount.textContent = String(getWorkingNodes().length);
+        els.categoryCount.textContent = String(state.allCategories.length);
+      }
+
+      function refreshVisualClasses() {
+        if (!state.cy) return;
+        const cy = state.cy;
+
+        cy.nodes().removeClass('selected-node search-match filter-match highlight-ancestor highlight-descendant algorithm-result isolate-focus isolated-out topo-layer-node topo-layer-selected click-hidden click-dim-node click-current-node click-path-node-active click-pred-neighbor click-succ-neighbor');
+        cy.edges().removeClass('highlight-edge-ancestor highlight-edge-descendant algorithm-edge isolated-out edge-selected click-hidden click-dim-edge click-path-edge click-pred-neighbor-edge click-succ-neighbor-edge');
+
+        if (state.algorithmInfo && state.algorithmInfo.type === 'topo' && state.algorithmInfo.result?.layers) {
+          state.algorithmInfo.result.layers.forEach((layer, idx) => {
+            const color = getTopoLayerColor(idx);
+            layer.forEach(id => {
+              const node = cy.getElementById(id);
+              if (node.nonempty()) {
+                node.data('topoLayerColor', color.fill);
+                node.data('topoLayerBorderColor', color.border);
+                node.addClass('topo-layer-node');
+                if (state.topoSelectedLayerIndices.has(idx)) node.addClass('topo-layer-selected');
+              }
+            });
+          });
+        }
+
+        state.searchMatchedNodeIds.forEach(id => {
+          const node = cy.getElementById(id);
+          if (node.nonempty()) node.addClass('search-match');
+        });
+
+        if (state.selectedNodeId) {
+          const selected = cy.getElementById(state.selectedNodeId);
+          if (selected.nonempty()) selected.addClass('selected-node');
+        }
+
+        state.filterMatchedNodeIds.forEach(id => {
+          const node = cy.getElementById(id);
+          if (node.nonempty()) node.addClass('filter-match');
+        });
+        state.predNodeIds.forEach(id => {
+          const node = cy.getElementById(id);
+          if (node.nonempty()) node.addClass('highlight-ancestor');
+        });
+        state.predEdgeIds.forEach(id => {
+          const edge = cy.getElementById(id);
+          if (edge.nonempty()) edge.addClass('highlight-edge-ancestor');
+        });
+        state.succNodeIds.forEach(id => {
+          const node = cy.getElementById(id);
+          if (node.nonempty()) node.addClass('highlight-descendant');
+        });
+        state.succEdgeIds.forEach(id => {
+          const edge = cy.getElementById(id);
+          if (edge.nonempty()) edge.addClass('highlight-edge-descendant');
+        });
+        state.algorithmNodeIds.forEach(id => {
+          const node = cy.getElementById(id);
+          if (node.nonempty()) node.addClass('algorithm-result');
+        });
+        state.algorithmEdgeIds.forEach(id => {
+          const edge = cy.getElementById(id);
+          if (edge.nonempty()) edge.addClass('algorithm-edge');
+        });
+
+        if (state.selectedEdgeId) {
+          const edge = cy.getElementById(state.selectedEdgeId);
+          if (edge.nonempty()) edge.addClass('edge-selected');
+        }
+
+        const focusIds = buildFocusSet();
+        focusIds.forEach(id => {
+          const node = cy.getElementById(id);
+          if (node.nonempty()) node.addClass('isolate-focus');
+        });
+
+        if (state.isolationActive) {
+          cy.nodes().forEach(node => {
+            if (!state.isolatedNodeIds.has(node.id())) node.addClass('isolated-out');
+          });
+          cy.edges().forEach(edge => {
+            if (!(state.isolatedNodeIds.has(edge.source().id()) && state.isolatedNodeIds.has(edge.target().id()))) {
+              edge.addClass('isolated-out');
+            }
+          });
+        }
+
+
+        if (state.clickTraversalModeActive) {
+          cy.nodes().forEach(node => {
+            if (!state.clickTraversalRevealedNodeIds.has(node.id())) node.addClass('click-hidden');
+          });
+          cy.edges().forEach(edge => {
+            if (!state.clickTraversalRevealedEdgeIds.has(edge.id())) edge.addClass('click-hidden');
+          });
+
+          state.clickTraversalPathIds.forEach(id => {
+            const node = cy.getElementById(id);
+            if (node.nonempty()) node.addClass('click-path-node-active');
+          });
+          state.clickTraversalPathEdgeIds.forEach(id => {
+            const edge = cy.getElementById(id);
+            if (edge.nonempty()) edge.addClass('click-path-edge');
+          });
+          state.clickTraversalNeighborPredIds.forEach(id => {
+            const node = cy.getElementById(id);
+            if (node.nonempty()) node.addClass('click-pred-neighbor');
+          });
+          state.clickTraversalNeighborPredEdgeIds.forEach(id => {
+            const edge = cy.getElementById(id);
+            if (edge.nonempty()) edge.addClass('click-pred-neighbor-edge');
+          });
+          state.clickTraversalNeighborSuccIds.forEach(id => {
+            const node = cy.getElementById(id);
+            if (node.nonempty()) node.addClass('click-succ-neighbor');
+          });
+          state.clickTraversalNeighborSuccEdgeIds.forEach(id => {
+            const edge = cy.getElementById(id);
+            if (edge.nonempty()) edge.addClass('click-succ-neighbor-edge');
+          });
+          if (state.clickTraversalFocusId) {
+            const node = cy.getElementById(state.clickTraversalFocusId);
+            if (node.nonempty()) node.addClass('click-current-node');
+          }
+        }
+
+
+        updateStats();
+      }
+
+      function buildFocusSet() {
+        const set = new Set();
+        if (state.selectedNodeId) set.add(state.selectedNodeId);
+        [state.searchMatchedNodeIds, state.filterMatchedNodeIds, state.predNodeIds, state.succNodeIds, state.algorithmNodeIds, state.clickTraversalRevealedNodeIds].forEach(sourceSet => {
+          sourceSet.forEach(id => set.add(id));
+        });
+        return set;
+      }
+
+
+      function selectNodeById(nodeId, fit = false) {
+        const node = getNodeById(nodeId);
+        if (!node) return false;
+        state.selectedNodeId = nodeId;
+        refreshVisualClasses();
+        updateSelectedNodeInfo(node);
+        renderClickTraversalInfo();
+        if (fit && state.cy) state.cy.fit(node, 80);
+        return true;
+      }
+
+      function performNodeSearch() {
+        if (!state.cy) return;
+        const query = String(els.nodeSearch.value || '').trim().toLowerCase();
+        state.searchMatchedNodeIds.clear();
+
+        if (!query) {
+          refreshVisualClasses();
+          updateSearchResultInfo('Knotensuche leer.');
+          setStatus('Bitte einen Suchbegriff für die Knotensuche eingeben.', true);
+          return;
+        }
+
+        state.cy.nodes().forEach(node => {
+          const haystack = [
+            node.id(),
+            node.data('label') || '',
+            node.data('description') || '',
+            ...(node.data('categories') || [])
+          ].join(' ').toLowerCase();
+          if (haystack.includes(query)) state.searchMatchedNodeIds.add(node.id());
+        });
+
+        refreshVisualClasses();
+
+        if (!state.searchMatchedNodeIds.size) {
+          updateSearchResultInfo(`Keine Knotensuche-Treffer für „${query}“.`);
+          setStatus(`Keine Knoten für „${query}“ gefunden.`, true);
+          return;
+        }
+
+        const firstId = [...state.searchMatchedNodeIds][0];
+        selectNodeById(firstId, true);
+        updateSearchResultInfo(`${state.searchMatchedNodeIds.size} Treffer für „${query}“. Der erste Treffer ist ausgewählt.`);
+        setStatus(`${state.searchMatchedNodeIds.size} Knoten über die Suche markiert.`);
+      }
+
+      function clearNodeSearch() {
+        state.searchMatchedNodeIds.clear();
+        els.nodeSearch.value = '';
+        refreshVisualClasses();
+        updateSearchResultInfo('Knotensuche zurückgesetzt.');
+        setStatus('Knotensuche zurückgesetzt.');
+      }
+
+      function clearIsolation() {
+        state.isolationActive = false;
+        state.isolatedNodeIds.clear();
+        refreshVisualClasses();
+        runLayout(true);
+        setStatus('Isolation aufgehoben. Gesamter Graph ist wieder sichtbar.');
+      }
+
+      function isolateCurrentFocus() {
+        if (!state.cy) return;
+        const focusIds = buildFocusSet();
+        if (!focusIds.size) {
+          setStatus('Es gibt noch keinen Fokus zum Isolieren. Wähle einen Knoten oder markiere/filtern etwas.', true);
+          return;
+        }
+        state.isolatedNodeIds = new Set(focusIds);
+        state.isolationActive = true;
+        refreshVisualClasses();
+        runLayout(true);
+        setStatus(`${focusIds.size} Fokus-Knoten isoliert und neu angeordnet.`);
+      }
+
+      function getLayoutMetrics(nodes, mode = getCurrentRelayoutMode()) {
+        const nodeCount = nodes.length;
+        const dimensions = nodes.map(node => {
+          const bb = node.boundingBox({ includeLabels: true, includeOverlays: false });
+          return {
+            width: Math.max(Math.round(bb.w || node.outerWidth() || 140), 90),
+            height: Math.max(Math.round(bb.h || node.outerHeight() || 56), 42)
+          };
+        });
+
+        const maxWidth = dimensions.length ? Math.max(...dimensions.map(dim => dim.width)) : 140;
+        const avgWidth = dimensions.length ? dimensions.reduce((sum, dim) => sum + dim.width, 0) / dimensions.length : 140;
+        const avgHeight = dimensions.length ? dimensions.reduce((sum, dim) => sum + dim.height, 0) / dimensions.length : 56;
+
+        if (mode === 'flow') {
+          const readabilityFactor = nodeCount <= 4 ? 0.94
+            : nodeCount <= 10 ? 1.0
+            : nodeCount <= 24 ? 1.06
+            : 1.12;
+          return {
+            mode,
+            nodeSep: Math.max(34, Math.min(140, Math.round((avgHeight * 0.78 + 18) * readabilityFactor))),
+            edgeSep: Math.max(14, Math.min(64, Math.round((avgHeight * 0.36 + 10) * readabilityFactor))),
+            rankSep: Math.max(110, Math.min(260, Math.round((maxWidth * 0.74 + avgWidth * 0.18 + 32) * readabilityFactor))),
+            spacingFactor: nodeCount <= 6 ? 1.0
+              : nodeCount <= 16 ? 1.04
+              : 1.08,
+            padding: nodeCount <= 10 ? 24 : 32,
+            minGap: Math.max(24, Math.round(avgHeight * 0.42 + 12)),
+            rankGap: Math.max(48, Math.round(maxWidth * 0.24 + 28)),
+            ranker: 'longest-path',
+            compactColumns: false
+          };
+        }
+
+        const densityFactor = nodeCount <= 4 ? 0.68
+          : nodeCount <= 8 ? 0.76
+          : nodeCount <= 16 ? 0.86
+          : nodeCount <= 32 ? 0.95
+          : 1.0;
+
+        return {
+          mode,
+          nodeSep: Math.max(22, Math.min(110, Math.round((avgHeight * 0.55 + 18) * densityFactor))),
+          edgeSep: Math.max(10, Math.min(50, Math.round((avgHeight * 0.26 + 8) * densityFactor))),
+          rankSep: Math.max(54, Math.min(180, Math.round((maxWidth * 0.42 + avgWidth * 0.1 + 16) * densityFactor))),
+          spacingFactor: nodeCount <= 4 ? 0.82
+            : nodeCount <= 8 ? 0.88
+            : nodeCount <= 16 ? 0.95
+            : 1.0,
+          padding: nodeCount <= 10 ? 16 : 24,
+          minGap: Math.max(16, Math.round(avgHeight * 0.28 + 8)),
+          rankGap: Math.max(28, Math.round(maxWidth * 0.12 + 18)),
+          ranker: 'network-simplex',
+          compactColumns: true
+        };
+      }
+
+      function clusterLayoutColumns(nodes) {
+        const entries = nodes.map(node => {
+          const bb = node.boundingBox({ includeLabels: true, includeOverlays: false });
+          return {
+            node,
+            x: node.position('x'),
+            y: node.position('y'),
+            width: Math.max(bb.w || node.outerWidth() || 120, 90),
+            height: Math.max(bb.h || node.outerHeight() || 48, 42)
+          };
+        }).sort((a, b) => a.x - b.x);
+
+        if (!entries.length) return [];
+        const averageWidth = entries.reduce((sum, entry) => sum + entry.width, 0) / entries.length;
+        const threshold = Math.max(36, Math.round(averageWidth * 0.28));
+        const columns = [];
+
+        entries.forEach(entry => {
+          const current = columns[columns.length - 1];
+          if (!current || Math.abs(entry.x - current.anchorX) > threshold) {
+            columns.push({ anchorX: entry.x, items: [entry] });
+            return;
+          }
+          current.items.push(entry);
+          current.anchorX = (current.anchorX * (current.items.length - 1) + entry.x) / current.items.length;
+        });
+
+        return columns;
+      }
+
+      function compactLayoutColumns(nodes, metrics) {
+        const columns = clusterLayoutColumns(nodes);
+        if (!columns.length) return;
+
+        const originalCenterX = columns.reduce((sum, column) => sum + column.anchorX, 0) / columns.length;
+        let firstColumnCenterY = null;
+
+        columns.forEach(column => {
+          column.items.sort((a, b) => a.y - b.y);
+          const originalCenterY = column.items.reduce((sum, item) => sum + item.y, 0) / column.items.length;
+          if (firstColumnCenterY === null) firstColumnCenterY = originalCenterY;
+
+          let cursor = 0;
+          column.items.forEach((item, index) => {
+            const halfHeight = item.height / 2;
+            if (index === 0) {
+              cursor = item.y - halfHeight;
+            } else {
+              cursor += metrics.minGap;
+            }
+            cursor += halfHeight;
+            item.newY = cursor;
+            cursor += halfHeight;
+          });
+
+          const compactCenterY = column.items.reduce((sum, item) => sum + item.newY, 0) / column.items.length;
+          const shiftY = originalCenterY - compactCenterY;
+          column.items.forEach(item => {
+            item.newY += shiftY;
+          });
+
+          column.maxWidth = Math.max(...column.items.map(item => item.width));
+        });
+
+        let cursorX = columns[0].anchorX;
+        columns.forEach((column, index) => {
+          const halfWidth = column.maxWidth / 2;
+          if (index === 0) {
+            column.newX = cursorX;
+          } else {
+            const previous = columns[index - 1];
+            cursorX = previous.newX + previous.maxWidth / 2 + halfWidth + metrics.rankGap;
+            column.newX = cursorX;
+          }
+        });
+
+        const compactCenterX = columns.reduce((sum, column) => sum + column.newX, 0) / columns.length;
+        const shiftX = originalCenterX - compactCenterX;
+
+        columns.forEach(column => {
+          column.items.forEach(item => {
+            item.node.position({
+              x: column.newX + shiftX,
+              y: item.newY
+            });
+          });
+        });
+      }
+
+      function runLayout(fit = true) {
+        if (!state.cy) return;
+        const layoutNodes = getDisplayedNodes();
+        const layoutEdges = getDisplayedEdges().filter(edge => layoutNodes.contains(edge.source()) && layoutNodes.contains(edge.target()));
+        const layoutCollection = layoutNodes.union(layoutEdges);
+        if (layoutCollection.nodes().length === 0) return;
+
+        const relayoutMode = getCurrentRelayoutMode();
+        const metrics = getLayoutMetrics(layoutNodes.toArray(), relayoutMode);
+        const layoutName = (typeof dagre !== 'undefined') ? 'dagre' : 'breadthfirst';
+        layoutCollection.layout({
+          name: layoutName,
+          rankDir: 'LR',
+          ranker: metrics.ranker,
+          nodeSep: metrics.nodeSep,
+          edgeSep: metrics.edgeSep,
+          rankSep: metrics.rankSep,
+          spacingFactor: metrics.spacingFactor,
+          nodeDimensionsIncludeLabels: true,
+          animate: false,
+          padding: metrics.padding,
+          fit: false,
+          boundingBox: { x1: 30, y1: 30, w: Math.max(state.cy.width() - 60, 200), h: Math.max(state.cy.height() - 60, 200) }
+        }).run();
+
+        if (metrics.compactColumns) {
+          compactLayoutColumns(layoutNodes.toArray(), metrics);
+        }
+        if (fit) fitCurrentView(40);
+      }
+
+      function applyCategoryFilter() {
+        if (!state.cy) return;
+        state.filterMatchedNodeIds.clear();
+        const selectedNorms = [...state.selectedCategories];
+        const filterMode = getCurrentFilterMode();
+        if (!selectedNorms.length) {
+          if (state.clickTraversalModeActive && state.clickTraversalFocusId) {
+            refreshClickTraversalDerivedSets(state.clickTraversalFocusId);
+          }
+          refreshVisualClasses();
+          renderClickTraversalInfo();
+          setStatus('Kategorienfilter zurückgesetzt. Es werden keine Knoten speziell markiert.');
+          return;
+        }
+
+        state.cy.nodes().forEach(node => {
+          if (nodeMatchesActiveCategoryFilter(node)) state.filterMatchedNodeIds.add(node.id());
+        });
+
+        if (state.clickTraversalModeActive && state.clickTraversalFocusId) {
+          const focusNode = getNodeById(state.clickTraversalFocusId);
+          if (!focusNode || !nodeMatchesActiveCategoryFilter(focusNode)) {
+            clearClickTraversalState();
+            syncClickTraversalButtons();
+            renderClickTraversalInfo();
+            refreshVisualClasses();
+            const filterModeLabel = filterMode.toUpperCase();
+            setStatus(`Der aktive Durchklick-Fokus entspricht nicht mehr dem ${filterModeLabel}-Kategorienfilter. Der Durchklick-Modus wurde beendet.`, true);
+            return;
+          }
+          refreshClickTraversalDerivedSets(state.clickTraversalFocusId);
+        }
+
+        refreshVisualClasses();
+        renderClickTraversalInfo();
+        const filterModeLabel = filterMode.toUpperCase();
+        const clickModeHint = state.clickTraversalModeActive ? ' Im Durchklick-Modus werden nur passende Knoten angezeigt.' : '';
+        setStatus(`${state.filterMatchedNodeIds.size} Knoten entsprechen dem ${filterModeLabel}-Kategorienfilter. Sie sind markiert, aber nicht isoliert.${clickModeHint}`);
+      }
+
+      function getRecursivePredecessors(node, maxDepth = Infinity) {
+        const nodes = new Set();
+        const edges = new Set();
+        const queue = [{ id: node.id(), depth: 0 }];
+        const visitedDepth = new Map([[node.id(), 0]]);
+        while (queue.length) {
+          const { id, depth } = queue.shift();
+          const current = getNodeById(id);
+          if (!current) continue;
+          if (depth >= maxDepth) continue;
+          getVisibleIncomingEdges(current).forEach(edge => {
+            const src = edge.source();
+            if (src.hasClass('isolated-out')) return;
+            const nextDepth = depth + 1;
+            if (nextDepth > maxDepth) return;
+            nodes.add(src.id());
+            edges.add(edge.id());
+            const knownDepth = visitedDepth.get(src.id());
+            if (knownDepth === undefined || nextDepth < knownDepth) {
+              visitedDepth.set(src.id(), nextDepth);
+              queue.push({ id: src.id(), depth: nextDepth });
+            }
+          });
+        }
+        nodes.delete(node.id());
+        return { nodes, edges };
+      }
+
+      function getRecursiveSuccessors(node, maxDepth = Infinity) {
+        const nodes = new Set();
+        const edges = new Set();
+        const queue = [{ id: node.id(), depth: 0 }];
+        const visitedDepth = new Map([[node.id(), 0]]);
+        while (queue.length) {
+          const { id, depth } = queue.shift();
+          const current = getNodeById(id);
+          if (!current) continue;
+          if (depth >= maxDepth) continue;
+          getVisibleOutgoingEdges(current).forEach(edge => {
+            const tgt = edge.target();
+            if (tgt.hasClass('isolated-out')) return;
+            const nextDepth = depth + 1;
+            if (nextDepth > maxDepth) return;
+            nodes.add(tgt.id());
+            edges.add(edge.id());
+            const knownDepth = visitedDepth.get(tgt.id());
+            if (knownDepth === undefined || nextDepth < knownDepth) {
+              visitedDepth.set(tgt.id(), nextDepth);
+              queue.push({ id: tgt.id(), depth: nextDepth });
+            }
+          });
+        }
+        nodes.delete(node.id());
+        return { nodes, edges };
+      }
+
+      function markPredecessors(additive = true) {
+        const node = getSelectedNode();
+        if (!node) {
+          setStatus('Bitte zuerst einen Knoten auswählen.', true);
+          return;
+        }
+        if (!additive) clearHighlightState();
+        state.predNodeIds.clear();
+        state.predEdgeIds.clear();
+
+        const recursive = els.recursiveToggle.checked;
+        const depthLabel = getRecursionDepthLabel();
+        if (recursive) {
+          const result = getRecursivePredecessors(node, parseRecursionDepth());
+          result.nodes.forEach(id => state.predNodeIds.add(id));
+          result.edges.forEach(id => state.predEdgeIds.add(id));
+        } else {
+          directPredecessorNodes(node).forEach(n => state.predNodeIds.add(n.id()));
+          getVisibleIncomingEdges(node).forEach(e => state.predEdgeIds.add(e.id()));
+        }
+
+        refreshVisualClasses();
+        setStatus(`${state.predNodeIds.size} Vorgänger von „${node.data('label')}“ markiert${recursive ? ` (rekursiv, ${depthLabel})` : ''}.`);
+      }
+
+      function markSuccessors(additive = true) {
+        const node = getSelectedNode();
+        if (!node) {
+          setStatus('Bitte zuerst einen Knoten auswählen.', true);
+          return;
+        }
+        if (!additive) clearHighlightState();
+        state.succNodeIds.clear();
+        state.succEdgeIds.clear();
+
+        const recursive = els.recursiveToggle.checked;
+        const depthLabel = getRecursionDepthLabel();
+        if (recursive) {
+          const result = getRecursiveSuccessors(node, parseRecursionDepth());
+          result.nodes.forEach(id => state.succNodeIds.add(id));
+          result.edges.forEach(id => state.succEdgeIds.add(id));
+        } else {
+          directSuccessorNodes(node).forEach(n => state.succNodeIds.add(n.id()));
+          getVisibleOutgoingEdges(node).forEach(e => state.succEdgeIds.add(e.id()));
+        }
+
+        refreshVisualClasses();
+        setStatus(`${state.succNodeIds.size} Nachfolger von „${node.data('label')}“ markiert${recursive ? ` (rekursiv, ${depthLabel})` : ''}.`);
+      }
+
+      function markBothDirections() {
+        markPredecessors(false);
+        markSuccessors(true);
+        const node = getSelectedNode();
+        if (node) {
+          setStatus(`${state.predNodeIds.size} Vorgänger und ${state.succNodeIds.size} Nachfolger von „${node.data('label')}“ markiert${els.recursiveToggle.checked ? ` (rekursiv, ${getRecursionDepthLabel()})` : ''}.`);
+        }
+      }
+
+      function clearHighlightsOnly() {
+        clearHighlightState();
+        refreshVisualClasses();
+        const node = getSelectedNode();
+        if (node) {
+          setStatus(`Markierungen gelöscht. Knoten „${node.data('label')}“ bleibt ausgewählt.`);
+        } else {
+          setStatus('Markierungen gelöscht.');
+        }
+      }
+
+      function setSelectedAsSource() {
+        const node = getSelectedNode();
+        if (!node) {
+          setStatus('Bitte zuerst einen Knoten auswählen.', true);
+          return;
+        }
+        state.sourceNodeId = node.id();
+        updateSourceTargetSummaries();
+        setStatus(`Quelle auf „${node.data('label')}“ gesetzt.`);
+      }
+
+      function setSelectedAsTarget() {
+        const node = getSelectedNode();
+        if (!node) {
+          setStatus('Bitte zuerst einen Knoten auswählen.', true);
+          return;
+        }
+        state.targetNodeId = node.id();
+        updateSourceTargetSummaries();
+        setStatus(`Ziel auf „${node.data('label')}“ gesetzt.`);
+      }
+
+      function getVisibleAdjacency(weightDefault = 1) {
+        const nodes = getWorkingNodes();
+        const edges = getWorkingEdges();
+        const adj = new Map();
+        const undirectedAdj = new Map();
+        nodes.forEach(node => {
+          adj.set(node.id(), []);
+          undirectedAdj.set(node.id(), []);
+        });
+        edges.forEach(edge => {
+          const source = edge.source().id();
+          const target = edge.target().id();
+          const weight = parseNumber(edge.data('weight'), weightDefault);
+          if (adj.has(source)) adj.get(source).push({ to: target, weight, edgeId: edge.id() });
+          if (undirectedAdj.has(source)) undirectedAdj.get(source).push({ to: target, weight, edgeId: edge.id() });
+          if (undirectedAdj.has(target)) undirectedAdj.get(target).push({ to: source, weight, edgeId: edge.id() });
+        });
+        return { adj, undirectedAdj };
+      }
+
+      function reconstructPath(prev, prevEdge, sourceId, targetId) {
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+        if (sourceId === targetId) {
+          nodeIds.add(sourceId);
+          return { nodeIds, edgeIds };
+        }
+        if (!prev.has(targetId)) return { nodeIds, edgeIds };
+        let current = targetId;
+        nodeIds.add(current);
+        while (current !== sourceId) {
+          const edgeId = prevEdge.get(current);
+          const parent = prev.get(current);
+          if (!parent || !edgeId) break;
+          edgeIds.add(edgeId);
+          current = parent;
+          nodeIds.add(current);
+        }
+        return { nodeIds, edgeIds };
+      }
+
+      function dijkstraDirected(sourceId, targetId = null) {
+        const weightDefault = parseNumber(els.weightDefaultInput.value, 1);
+        const { adj } = getVisibleAdjacency(weightDefault);
+        if (!adj.has(sourceId)) return null;
+
+        const dist = new Map();
+        const prev = new Map();
+        const prevEdge = new Map();
+        const unvisited = new Set(adj.keys());
+        adj.forEach((_, id) => dist.set(id, Infinity));
+        dist.set(sourceId, 0);
+
+        while (unvisited.size) {
+          let current = null;
+          let best = Infinity;
+          unvisited.forEach(id => {
+            const value = dist.get(id);
+            if (value < best) { best = value; current = id; }
+          });
+          if (current === null || best === Infinity) break;
+          unvisited.delete(current);
+          if (targetId && current === targetId) break;
+
+          for (const step of adj.get(current) || []) {
+            if (!unvisited.has(step.to)) continue;
+            const nextDist = best + step.weight;
+            if (nextDist < dist.get(step.to)) {
+              dist.set(step.to, nextDist);
+              prev.set(step.to, current);
+              prevEdge.set(step.to, step.edgeId);
+            }
+          }
+        }
+
+        return { dist, prev, prevEdge, weightDefault };
+      }
+
+      function getWeakComponent(startId) {
+        const { undirectedAdj } = getVisibleAdjacency(parseNumber(els.weightDefaultInput.value, 1));
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+        const queue = [startId];
+        const visited = new Set(queue);
+        while (queue.length) {
+          const current = queue.shift();
+          nodeIds.add(current);
+          for (const next of undirectedAdj.get(current) || []) {
+            edgeIds.add(next.edgeId);
+            if (!visited.has(next.to)) {
+              visited.add(next.to);
+              queue.push(next.to);
+            }
+          }
+        }
+        return { nodeIds, edgeIds };
+      }
+
+      function computeSCCsForVisible() {
+        const nodes = getWorkingNodes().map(n => n.id());
+        const { adj } = getVisibleAdjacency(parseNumber(els.weightDefaultInput.value, 1));
+        let index = 0;
+        const stack = [];
+        const onStack = new Set();
+        const indexes = new Map();
+        const low = new Map();
+        const components = [];
+
+        function strongConnect(v) {
+          indexes.set(v, index);
+          low.set(v, index);
+          index += 1;
+          stack.push(v);
+          onStack.add(v);
+
+          for (const edge of adj.get(v) || []) {
+            const w = edge.to;
+            if (!indexes.has(w)) {
+              strongConnect(w);
+              low.set(v, Math.min(low.get(v), low.get(w)));
+            } else if (onStack.has(w)) {
+              low.set(v, Math.min(low.get(v), indexes.get(w)));
+            }
+          }
+
+          if (low.get(v) === indexes.get(v)) {
+            const comp = [];
+            let w;
+            do {
+              w = stack.pop();
+              onStack.delete(w);
+              comp.push(w);
+            } while (w !== v);
+            components.push(comp);
+          }
+        }
+
+        nodes.forEach(v => {
+          if (!indexes.has(v)) strongConnect(v);
+        });
+        return components;
+      }
+
+      function getStrongComponent(startId) {
+        const components = computeSCCsForVisible();
+        const component = components.find(comp => comp.includes(startId)) || [];
+        const nodeIds = new Set(component);
+        const edgeIds = new Set();
+        getWorkingEdges().forEach(edge => {
+          if (nodeIds.has(edge.source().id()) && nodeIds.has(edge.target().id())) edgeIds.add(edge.id());
+        });
+        return { nodeIds, edgeIds, componentsCount: components.length };
+      }
+
+      function computeSources() {
+        const nodeIds = new Set();
+        getWorkingNodes().forEach(node => {
+          if (getVisibleIncomingEdges(node).length === 0) nodeIds.add(node.id());
+        });
+        return { nodeIds, edgeIds: new Set() };
+      }
+
+      function computeSinks() {
+        const nodeIds = new Set();
+        getWorkingNodes().forEach(node => {
+          if (getVisibleOutgoingEdges(node).length === 0) nodeIds.add(node.id());
+        });
+        return { nodeIds, edgeIds: new Set() };
+      }
+
+      function computeCycleNodes() {
+        const sccs = computeSCCsForVisible();
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+        sccs.forEach(comp => {
+          if (comp.length > 1) {
+            comp.forEach(id => nodeIds.add(id));
+          } else {
+            const only = comp[0];
+            const node = getNodeById(only);
+            if (node && getVisibleOutgoingEdges(node).some(e => e.target().id() === only)) {
+              nodeIds.add(only);
+            }
+          }
+        });
+        getWorkingEdges().forEach(edge => {
+          if (nodeIds.has(edge.source().id()) && nodeIds.has(edge.target().id())) edgeIds.add(edge.id());
+        });
+        return { nodeIds, edgeIds };
+      }
+
+      function computeTopoLayers() {
+        const nodes = getWorkingNodes();
+        const indeg = new Map();
+        const layers = [];
+        const queue = [];
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+
+        nodes.forEach(node => indeg.set(node.id(), 0));
+        getWorkingEdges().forEach(edge => indeg.set(edge.target().id(), (indeg.get(edge.target().id()) || 0) + 1));
+        indeg.forEach((value, id) => { if (value === 0) queue.push(id); });
+
+        let processed = 0;
+        while (queue.length) {
+          const size = queue.length;
+          const layer = [];
+          for (let i = 0; i < size; i += 1) {
+            const id = queue.shift();
+            layer.push(id);
+            nodeIds.add(id);
+            processed += 1;
+            const node = getNodeById(id);
+            getVisibleOutgoingEdges(node).forEach(edge => {
+              edgeIds.add(edge.id());
+              const targetId = edge.target().id();
+              indeg.set(targetId, indeg.get(targetId) - 1);
+              if (indeg.get(targetId) === 0) queue.push(targetId);
+            });
+          }
+          layers.push(layer);
+        }
+
+        const isDag = processed === nodes.length;
+        return { nodeIds, edgeIds, layers, isDag, processed, total: nodes.length };
+      }
+
+      function computeLongestDagPath() {
+        const topo = computeTopoLayers();
+        if (!topo.isDag) {
+          return { nodeIds: new Set(), edgeIds: new Set(), error: 'Der sichtbare Teilgraph ist kein DAG. Ein längster Pfad ist hier nicht eindeutig definiert.' };
+        }
+
+        const order = topo.layers.flat();
+        const dist = new Map();
+        const prev = new Map();
+        const prevEdge = new Map();
+        order.forEach(id => dist.set(id, Number.NEGATIVE_INFINITY));
+        const sources = order.filter(id => {
+          const node = getNodeById(id);
+          return getVisibleIncomingEdges(node).length === 0;
+        });
+        sources.forEach(id => dist.set(id, 0));
+
+        order.forEach(id => {
+          const node = getNodeById(id);
+          getVisibleOutgoingEdges(node).forEach(edge => {
+            const targetId = edge.target().id();
+            const next = dist.get(id) + 1;
+            if (next > dist.get(targetId)) {
+              dist.set(targetId, next);
+              prev.set(targetId, id);
+              prevEdge.set(targetId, edge.id());
+            }
+          });
+        });
+
+        let endId = null;
+        let best = Number.NEGATIVE_INFINITY;
+        dist.forEach((value, id) => {
+          if (value > best) { best = value; endId = id; }
+        });
+        if (endId === null) return { nodeIds: new Set(), edgeIds: new Set(), error: 'Kein Pfad gefunden.' };
+
+        const nodeIds = new Set([endId]);
+        const edgeIds = new Set();
+        let current = endId;
+        while (prev.has(current)) {
+          edgeIds.add(prevEdge.get(current));
+          current = prev.get(current);
+          nodeIds.add(current);
+        }
+        return { nodeIds, edgeIds, length: best };
+      }
+
+      function computeShortestPath() {
+        if (!state.sourceNodeId || !state.targetNodeId) {
+          return { nodeIds: new Set(), edgeIds: new Set(), error: 'Bitte Quelle und Ziel setzen.' };
+        }
+        const result = dijkstraDirected(state.sourceNodeId, state.targetNodeId);
+        if (!result) return { nodeIds: new Set(), edgeIds: new Set(), error: 'Quelle ist im aktuellen sichtbaren Graphen nicht verfügbar.' };
+        const path = reconstructPath(result.prev, result.prevEdge, state.sourceNodeId, state.targetNodeId);
+        if (!path.nodeIds.size) {
+          return { nodeIds: new Set(), edgeIds: new Set(), error: 'Zwischen Quelle und Ziel wurde kein gerichteter Pfad gefunden.' };
+        }
+        return { ...path, distance: result.dist.get(state.targetNodeId), weightDefault: result.weightDefault };
+      }
+
+      function computeShortestTree() {
+        if (!state.sourceNodeId) {
+          return { nodeIds: new Set(), edgeIds: new Set(), error: 'Bitte zuerst eine Quelle setzen.' };
+        }
+        const result = dijkstraDirected(state.sourceNodeId, null);
+        if (!result) return { nodeIds: new Set(), edgeIds: new Set(), error: 'Quelle ist im aktuellen sichtbaren Graphen nicht verfügbar.' };
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+        result.dist.forEach((distance, id) => {
+          if (distance < Infinity) nodeIds.add(id);
+        });
+        result.prevEdge.forEach(edgeId => edgeIds.add(edgeId));
+        return { nodeIds, edgeIds, reachable: nodeIds.size };
+      }
+
+      function computeMinimumSpanningTree() {
+        const weightDefault = parseNumber(els.weightDefaultInput.value, 1);
+        const nodes = getWorkingNodes().map(n => n.id());
+        const edges = getWorkingEdges().map(edge => ({
+          id: edge.id(),
+          source: edge.source().id(),
+          target: edge.target().id(),
+          weight: parseNumber(edge.data('weight'), weightDefault)
+        }));
+        edges.sort((a, b) => a.weight - b.weight || a.id.localeCompare(b.id));
+
+        const parent = new Map();
+        const rank = new Map();
+        nodes.forEach(id => { parent.set(id, id); rank.set(id, 0); });
+        function find(x) {
+          if (parent.get(x) !== x) parent.set(x, find(parent.get(x)));
+          return parent.get(x);
+        }
+        function union(a, b) {
+          let ra = find(a), rb = find(b);
+          if (ra === rb) return false;
+          if (rank.get(ra) < rank.get(rb)) [ra, rb] = [rb, ra];
+          parent.set(rb, ra);
+          if (rank.get(ra) === rank.get(rb)) rank.set(ra, rank.get(ra) + 1);
+          return true;
+        }
+
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+        let totalWeight = 0;
+        edges.forEach(edge => {
+          if (union(edge.source, edge.target)) {
+            edgeIds.add(edge.id);
+            nodeIds.add(edge.source);
+            nodeIds.add(edge.target);
+            totalWeight += edge.weight;
+          }
+        });
+        return { nodeIds, edgeIds, totalWeight };
+      }
+
+      function computePageRankTop() {
+        const nodes = getWorkingNodes().map(n => n.id());
+        const edges = getWorkingEdges();
+        const damping = 0.85;
+        const iterations = 40;
+        const ranks = new Map();
+        nodes.forEach(id => ranks.set(id, nodes.length ? 1 / nodes.length : 0));
+
+        const outgoing = new Map();
+        nodes.forEach(id => outgoing.set(id, 0));
+        edges.forEach(edge => outgoing.set(edge.source().id(), outgoing.get(edge.source().id()) + 1));
+
+        for (let iter = 0; iter < iterations; iter += 1) {
+          const next = new Map();
+          nodes.forEach(id => next.set(id, (1 - damping) / Math.max(nodes.length, 1)));
+          nodes.forEach(id => {
+            const shareCount = outgoing.get(id) || 0;
+            if (shareCount === 0) {
+              const share = damping * (ranks.get(id) || 0) / Math.max(nodes.length, 1);
+              nodes.forEach(targetId => next.set(targetId, next.get(targetId) + share));
+            }
+          });
+          edges.forEach(edge => {
+            const source = edge.source().id();
+            const target = edge.target().id();
+            const shareCount = outgoing.get(source) || 1;
+            next.set(target, next.get(target) + damping * (ranks.get(source) || 0) / shareCount);
+          });
+          nodes.forEach(id => ranks.set(id, next.get(id)));
+        }
+
+        const topN = Math.max(1, Math.floor(parseNumber(els.topNInput.value, 5)));
+        const sorted = [...ranks.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN);
+        const nodeIds = new Set(sorted.map(([id]) => id));
+        return { nodeIds, edgeIds: new Set(), ranks: sorted };
+      }
+
+      function computeDegreeTop() {
+        const topN = Math.max(1, Math.floor(parseNumber(els.topNInput.value, 5)));
+        const ranked = getWorkingNodes().map(node => ({
+          id: node.id(),
+          total: node.connectedEdges().filter(e => !e.hasClass('isolated-out')).length,
+          incoming: getVisibleIncomingEdges(node).length,
+          outgoing: getVisibleOutgoingEdges(node).length
+        })).sort((a, b) => b.total - a.total || a.id.localeCompare(b.id)).slice(0, topN);
+        return { nodeIds: new Set(ranked.map(item => item.id)), edgeIds: new Set(), ranked };
+      }
+
+
+      function buildTopoLayerButtonsHtml(layers) {
+        return `<div class="layer-picker">${layers.map((layer, idx) => {
+          const active = state.topoSelectedLayerIndices.has(idx);
+          const activeClass = active ? ' active' : '';
+          return `<button type="button" class="layer-btn${activeClass}" data-layer-idx="${idx}" style="${getTopoLayerButtonStyle(idx, active)}">Schicht ${idx + 1} (${layer.length})</button>`;
+        }).join('')}</div>`;
+      }
+
+      function buildTopoLayerRowsHtml(layers) {
+        return `<div class="layer-list">${layers.map((layer, idx) => {
+          const color = getTopoLayerColor(idx);
+          const activeClass = state.topoSelectedLayerIndices.has(idx) ? ' active' : '';
+          return `<div class="layer-row${activeClass}">
+            <span class="layer-swatch" style="background:${color.fill}; border-color:${color.border};"></span>
+            <div class="layer-row-text">
+              <div><strong>Schicht ${idx + 1}</strong> <span class="muted">(${layer.length} Knoten)</span></div>
+              <div>${layer.map(id => `<code>${escapeHtml(id)}</code>`).join(' ')}</div>
+            </div>
+          </div>`;
+        }).join('')}</div>`;
+      }
+
+      function applySelectedTopoLayers() {
+        if (!state.algorithmInfo || state.algorithmInfo.type !== 'topo') return;
+        const result = state.algorithmInfo.result;
+        if (!state.topoSelectedLayerIndices.size) {
+          state.algorithmNodeIds = new Set(result.nodeIds || []);
+          state.algorithmEdgeIds = new Set(result.edgeIds || []);
+        } else {
+          const selectedNodeIds = new Set();
+          state.topoSelectedLayerIndices.forEach(idx => {
+            (result.layers[idx] || []).forEach(id => selectedNodeIds.add(id));
+          });
+          const selectedEdgeIds = new Set();
+          getWorkingEdges().forEach(edge => {
+            if (selectedNodeIds.has(edge.source().id()) && selectedNodeIds.has(edge.target().id())) {
+              selectedEdgeIds.add(edge.id());
+            }
+          });
+          state.algorithmNodeIds = selectedNodeIds;
+          state.algorithmEdgeIds = selectedEdgeIds;
+        }
+        refreshVisualClasses();
+        renderAlgorithmSummary();
+      }
+
+      function truncateList(ids, limit = 8) {
+        const safe = Array.from(ids || []);
+        if (safe.length <= limit) return safe;
+        return [...safe.slice(0, limit), `… +${safe.length - limit}`];
+      }
+
+      function buildAlgorithmGroupButtonsHtml(groups, selectedIndices, labelPrefix = 'Gruppe') {
+        return `<div class="layer-buttons">${groups.map((group, idx) => {
+          const isActive = selectedIndices.has(idx);
+          const color = getTopoLayerColor(idx);
+          const label = group.shortLabel || `${labelPrefix} ${idx + 1}`;
+          return `<button type="button" class="layer-button${isActive ? ' active' : ''}" style="${getTopoLayerButtonStyle(idx, isActive)}" data-algo-group-idx="${idx}">${escapeHtml(label)}</button>`;
+        }).join('')}</div>`;
+      }
+
+      function buildAlgorithmGroupRowsHtml(groups, selectedIndices, labelPrefix = 'Gruppe') {
+        return `<div class="layer-list">${groups.map((group, idx) => {
+          const color = getTopoLayerColor(idx);
+          const activeClass = selectedIndices.has(idx) ? ' active' : '';
+          const title = group.title || `${labelPrefix} ${idx + 1}`;
+          const sub = group.subtitle ? `<div class="muted" style="margin-top:4px;">${group.subtitle}</div>` : '';
+          const nodes = truncateList(group.nodeIds || [], 10).map(id => id.startsWith('… +') ? escapeHtml(id) : `<code>${escapeHtml(id)}</code>`).join(' ');
+          return `<div class="layer-row${activeClass}">
+            <span class="layer-swatch" style="background:${color.fill}; border-color:${color.border};"></span>
+            <div class="layer-row-text">
+              <div><strong>${escapeHtml(title)}</strong> <span class="muted">(${(group.nodeIds || []).length} Knoten, ${((group.edgeIds || []).length)} Kanten)</span></div>
+              ${sub}
+              <div style="margin-top:4px;">${nodes}</div>
+            </div>
+          </div>`;
+        }).join('')}</div>`;
+      }
+
+      function applySelectedAlgorithmGroups() {
+        if (!state.algorithmInfo || !['source-flow', 'path-cover'].includes(state.algorithmInfo.type)) return;
+        const result = state.algorithmInfo.result;
+        const groups = result.groups || [];
+        if (!state.algorithmGroupSelectedIndices.size) {
+          state.algorithmNodeIds = new Set(result.nodeIds || []);
+          state.algorithmEdgeIds = new Set(result.edgeIds || []);
+        } else {
+          const nodeIds = new Set();
+          const edgeIds = new Set();
+          [...state.algorithmGroupSelectedIndices].forEach(idx => {
+            const group = groups[idx];
+            if (!group) return;
+            (group.nodeIds || []).forEach(id => nodeIds.add(id));
+            (group.edgeIds || []).forEach(id => edgeIds.add(id));
+            (group.mainPathEdgeIds || []).forEach(id => edgeIds.add(id));
+          });
+          state.algorithmNodeIds = nodeIds;
+          state.algorithmEdgeIds = edgeIds;
+        }
+        refreshVisualClasses();
+        renderAlgorithmSummary();
+      }
+
+      function renderAlgorithmSummary() {
+        if (!state.algorithmInfo) {
+          updateAlgorithmSummaryBox('Kein Algorithmus-Ergebnis aktiv.', '<div class="muted">Wähle einen Algorithmus aus und klicke auf „Algorithmus ausführen“.</div>');
+          return;
+        }
+        const { type, description, result, detailsHtml } = state.algorithmInfo;
+        let extraHtml = detailsHtml || '';
+
+        if (type === 'topo') {
+          const selectedLayerIndices = [...state.topoSelectedLayerIndices].sort((a, b) => a - b);
+          const hint = selectedLayerIndices.length
+            ? `Ausgewählte Schichten: ${selectedLayerIndices.map(idx => idx + 1).join(', ')}. Diese Schichten sind markiert und können direkt isoliert werden.`
+            : 'Keine Einzelschicht ausgewählt: Alle Schichten des topologischen Ergebnisses sind aktiv.';
+          const isolateLabel = selectedLayerIndices.length ? 'Ausgewählte Schichten isolieren' : 'Alle Schichten isolieren';
+          extraHtml = `
+            <div class="muted" style="margin-top:8px;">Jede Schicht hat eine eigene Farbe. Klicke auf eine oder mehrere Schichten, um genau diese Schichten zu markieren. Danach kannst du sie direkt isolieren.</div>
+            ${buildTopoLayerButtonsHtml(result.layers)}
+            <div class="layer-actions">
+              <button type="button" class="layer-action-btn" data-topo-select-all="1">Alle Schichten markieren</button>
+              <button type="button" class="layer-action-btn" data-topo-clear-selection="1">Schichtenauswahl leeren</button>
+              <button type="button" class="layer-action-btn" data-topo-isolate="1">${isolateLabel}</button>
+            </div>
+            <div class="muted" style="margin-bottom:8px;">${hint}</div>
+            ${buildTopoLayerRowsHtml(result.layers)}
+          `;
+        } else if (type === 'source-flow' || type === 'path-cover') {
+          const groups = result.groups || [];
+          const selectedIndices = [...state.algorithmGroupSelectedIndices].sort((a, b) => a - b);
+          const labelPrefix = type === 'source-flow' ? 'Flow-Bereich' : 'Pfad';
+          const hint = selectedIndices.length
+            ? `Ausgewählte ${labelPrefix.toLowerCase()}e: ${selectedIndices.map(idx => idx + 1).join(', ')}.`
+            : `Keine Einzelauswahl aktiv: Alle ${labelPrefix.toLowerCase()}e des Ergebnisses sind markiert.`;
+          const isolateLabel = selectedIndices.length ? 'Auswahl isolieren' : 'Alle Bereiche isolieren';
+          extraHtml = `
+            <div class="muted" style="margin-top:8px;">Klicke auf einen oder mehrere ${labelPrefix.toLowerCase()}e, um gezielt nur diese zu markieren oder zu isolieren.</div>
+            ${buildAlgorithmGroupButtonsHtml(groups, state.algorithmGroupSelectedIndices, labelPrefix)}
+            <div class="layer-actions">
+              <button type="button" class="layer-action-btn" data-algo-group-select-all="1">Alle markieren</button>
+              <button type="button" class="layer-action-btn" data-algo-group-clear-selection="1">Auswahl leeren</button>
+              <button type="button" class="layer-action-btn" data-algo-group-isolate="1">${isolateLabel}</button>
+            </div>
+            <div class="muted" style="margin-bottom:8px;">${hint}</div>
+            ${buildAlgorithmGroupRowsHtml(groups, state.algorithmGroupSelectedIndices, labelPrefix)}
+          `;
+        }
+
+        updateAlgorithmSummaryBox(description, extraHtml);
+      }
+
+
+      function computeMinimumPathCover() {
+        const topo = computeTopoLayers();
+        if (!topo.isDag) {
+          return { nodeIds: new Set(), edgeIds: new Set(), groups: [], error: 'Der sichtbare Teilgraph ist kein DAG. Das Minimum Path Cover ist hier in dieser Form nicht definiert.' };
+        }
+
+        const order = topo.layers.flat();
+        const topoIndex = new Map(order.map((id, idx) => [id, idx]));
+        const { adj } = getVisibleAdjacency(parseNumber(els.weightDefaultInput.value, 1));
+        const matchRight = new Map();
+        const matchRightEdge = new Map();
+
+        function dfs(leftId, seen) {
+          for (const step of adj.get(leftId) || []) {
+            const rightId = step.to;
+            if (seen.has(rightId)) continue;
+            seen.add(rightId);
+            if (!matchRight.has(rightId) || dfs(matchRight.get(rightId), seen)) {
+              matchRight.set(rightId, leftId);
+              matchRightEdge.set(rightId, step.edgeId);
+              return true;
+            }
+          }
+          return false;
+        }
+
+        order.forEach(id => dfs(id, new Set()));
+
+        const nextByLeft = new Map();
+        const edgeByLeft = new Map();
+        matchRight.forEach((leftId, rightId) => {
+          nextByLeft.set(leftId, rightId);
+          edgeByLeft.set(leftId, matchRightEdge.get(rightId));
+        });
+
+        const matchedAsRight = new Set(matchRight.keys());
+        const starts = order.filter(id => !matchedAsRight.has(id));
+        const groups = [];
+        const nodeIds = new Set();
+        const edgeIds = new Set();
+
+        starts.forEach(startId => {
+          const pathNodeIds = [];
+          const pathEdgeIds = [];
+          let current = startId;
+          const seen = new Set();
+          while (current && !seen.has(current)) {
+            seen.add(current);
+            pathNodeIds.push(current);
+            nodeIds.add(current);
+            const nextId = nextByLeft.get(current);
+            const edgeId = edgeByLeft.get(current);
+            if (nextId && edgeId) {
+              pathEdgeIds.push(edgeId);
+              edgeIds.add(edgeId);
+            }
+            current = nextId || null;
+          }
+          groups.push({
+            shortLabel: `Pfad ${groups.length + 1}`,
+            title: `Pfad ${groups.length + 1}`,
+            subtitle: `Start <code>${escapeHtml(startId)}</code> · Ende <code>${escapeHtml(pathNodeIds[pathNodeIds.length - 1] || startId)}</code> · Länge ${pathNodeIds.length}`,
+            startId,
+            endId: pathNodeIds[pathNodeIds.length - 1] || startId,
+            nodeIds: pathNodeIds,
+            edgeIds: pathEdgeIds,
+            mainPathNodeIds: pathNodeIds,
+            mainPathEdgeIds: pathEdgeIds
+          });
+        });
+
+        groups.sort((a, b) => (topoIndex.get(a.startId) ?? 0) - (topoIndex.get(b.startId) ?? 0) || a.startId.localeCompare(b.startId));
+        return {
+          nodeIds,
+          edgeIds,
+          groups,
+          pathCount: groups.length,
+          matchingSize: matchRight.size,
+          totalNodes: order.length
+        };
+      }
+
+      function computeSourceFlowSubgraphs() {
+        const topo = computeTopoLayers();
+        if (!topo.isDag) {
+          return { nodeIds: new Set(), edgeIds: new Set(), groups: [], error: 'Der sichtbare Teilgraph ist kein DAG. Quellenbasierte Flow-Subgraphen setzen hier eine azyklische Reihenfolge voraus.' };
+        }
+
+        const order = topo.layers.flat();
+        const topoIndex = new Map(order.map((id, idx) => [id, idx]));
+        const sourceSet = computeSources().nodeIds;
+        const sourceIds = order.filter(id => sourceSet.has(id));
+        const sourceRank = new Map(sourceIds.map((id, idx) => [id, idx]));
+        const ownerByNode = new Map();
+        const depthByNode = new Map();
+        const prevNodeByNode = new Map();
+        const prevEdgeByNode = new Map();
+
+        sourceIds.forEach(id => {
+          ownerByNode.set(id, id);
+          depthByNode.set(id, 0);
+        });
+
+        order.forEach(id => {
+          if (ownerByNode.has(id)) return;
+          const node = getNodeById(id);
+          const incoming = getVisibleIncomingEdges(node).toArray();
+          let best = null;
+          incoming.forEach(edge => {
+            const predId = edge.source().id();
+            if (!ownerByNode.has(predId)) return;
+            const ownerId = ownerByNode.get(predId);
+            const score = (depthByNode.get(predId) ?? 0) + 1;
+            const candidate = {
+              ownerId,
+              predId,
+              edgeId: edge.id(),
+              score,
+              sourceRank: sourceRank.get(ownerId) ?? Number.MAX_SAFE_INTEGER,
+              predRank: topoIndex.get(predId) ?? Number.MAX_SAFE_INTEGER
+            };
+            if (!best || candidate.score > best.score || (candidate.score === best.score && candidate.sourceRank < best.sourceRank) || (candidate.score === best.score && candidate.sourceRank === best.sourceRank && candidate.predRank < best.predRank) || (candidate.score === best.score && candidate.sourceRank === best.sourceRank && candidate.predRank === best.predRank && candidate.predId.localeCompare(best.predId) < 0)) {
+              best = candidate;
+            }
+          });
+          if (best) {
+            ownerByNode.set(id, best.ownerId);
+            depthByNode.set(id, best.score);
+            prevNodeByNode.set(id, best.predId);
+            prevEdgeByNode.set(id, best.edgeId);
+          } else {
+            ownerByNode.set(id, id);
+            depthByNode.set(id, 0);
+          }
+        });
+
+        const groupsBySource = new Map();
+        sourceIds.forEach(sourceId => {
+          groupsBySource.set(sourceId, {
+            sourceId,
+            nodeIds: [],
+            edgeIds: [],
+            mainPathNodeIds: [],
+            mainPathEdgeIds: []
+          });
+        });
+
+        order.forEach(id => {
+          const ownerId = ownerByNode.get(id) || id;
+          if (!groupsBySource.has(ownerId)) {
+            groupsBySource.set(ownerId, { sourceId: ownerId, nodeIds: [], edgeIds: [], mainPathNodeIds: [], mainPathEdgeIds: [] });
+          }
+          groupsBySource.get(ownerId).nodeIds.push(id);
+        });
+
+        getWorkingEdges().forEach(edge => {
+          const sourceOwner = ownerByNode.get(edge.source().id());
+          const targetOwner = ownerByNode.get(edge.target().id());
+          if (sourceOwner && sourceOwner === targetOwner && groupsBySource.has(sourceOwner)) {
+            groupsBySource.get(sourceOwner).edgeIds.push(edge.id());
+          }
+        });
+
+        const groups = sourceIds.map((sourceId, idx) => {
+          const group = groupsBySource.get(sourceId) || { sourceId, nodeIds: [], edgeIds: [], mainPathNodeIds: [], mainPathEdgeIds: [] };
+          let deepestNodeId = sourceId;
+          let bestDepth = -1;
+          group.nodeIds.forEach(id => {
+            const depth = depthByNode.get(id) ?? 0;
+            if (depth > bestDepth || (depth === bestDepth && (topoIndex.get(id) ?? 0) < (topoIndex.get(deepestNodeId) ?? 0))) {
+              bestDepth = depth;
+              deepestNodeId = id;
+            }
+          });
+          const mainPathNodeIds = [];
+          const mainPathEdgeIds = [];
+          let current = deepestNodeId;
+          const seen = new Set();
+          while (current && !seen.has(current)) {
+            seen.add(current);
+            mainPathNodeIds.push(current);
+            if (current === sourceId) break;
+            const edgeId = prevEdgeByNode.get(current);
+            const prevId = prevNodeByNode.get(current);
+            if (edgeId) mainPathEdgeIds.push(edgeId);
+            current = prevId;
+          }
+          mainPathNodeIds.reverse();
+          mainPathEdgeIds.reverse();
+          const sourceNode = getNodeById(sourceId);
+          return {
+            shortLabel: `Bereich ${idx + 1}`,
+            title: `Flow-Bereich ${idx + 1}`,
+            subtitle: `Quelle <code>${escapeHtml(sourceId)}</code>${sourceNode ? ` — ${escapeHtml(sourceNode.data('label') || sourceId)}` : ''} · Hauptpfad ${mainPathNodeIds.length} Knoten`,
+            sourceId,
+            nodeIds: group.nodeIds,
+            edgeIds: group.edgeIds,
+            mainPathNodeIds,
+            mainPathEdgeIds,
+            maxDepth: bestDepth
+          };
+        });
+
+        const nodeIds = new Set(order);
+        const edgeIds = new Set();
+        groups.forEach(group => (group.edgeIds || []).forEach(id => edgeIds.add(id)));
+        const crossEdgeCount = getWorkingEdges().toArray().filter(edge => ownerByNode.get(edge.source().id()) !== ownerByNode.get(edge.target().id())).length;
+
+        return {
+          nodeIds,
+          edgeIds,
+          groups,
+          sourceIds,
+          crossEdgeCount
+        };
+      }
+
+      function computeBetweennessTop() {
+        const nodes = getWorkingNodes().map(n => n.id());
+        const topN = Math.max(1, Math.floor(parseNumber(els.topNInput.value, 5)));
+        const scores = new Map(nodes.map(id => [id, 0]));
+        for (const source of nodes) {
+          const result = dijkstraDirected(source);
+          if (!result) continue;
+          for (const target of nodes) {
+            if (target === source || !result.prev.has(target)) continue;
+            let current = target;
+            const pathNodes = [];
+            while (current !== source && result.prev.has(current)) {
+              pathNodes.push(current);
+              current = result.prev.get(current);
+            }
+            if (current === source) {
+              pathNodes.push(source);
+              pathNodes.reverse().slice(1, -1).forEach(id => scores.set(id, scores.get(id) + 1));
+            }
+          }
+        }
+        const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, topN);
+        return { nodeIds: new Set(ranked.map(([id]) => id)), edgeIds: new Set(), ranked };
+      }
+
+      function computeClosenessTop() {
+        const nodes = getWorkingNodes().map(n => n.id());
+        const topN = Math.max(1, Math.floor(parseNumber(els.topNInput.value, 5)));
+        const ranked = [];
+        for (const source of nodes) {
+          const result = dijkstraDirected(source);
+          if (!result) continue;
+          let sum = 0;
+          let reachable = 0;
+          result.dist.forEach((dist, id) => {
+            if (id !== source && Number.isFinite(dist)) {
+              sum += dist;
+              reachable += 1;
+            }
+          });
+          const score = reachable && sum > 0 ? reachable / sum : 0;
+          ranked.push({ id: source, score, reachable });
+        }
+        ranked.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+        const top = ranked.slice(0, topN);
+        return { nodeIds: new Set(top.map(item => item.id)), edgeIds: new Set(), ranked: top };
+      }
+
+      function applyAlgorithmResult(result, type, description, detailsHtml = '') {
+        clearAlgorithmState();
+        state.algorithmGroupSelectedIndices.clear();
+        (result.nodeIds || new Set()).forEach(id => state.algorithmNodeIds.add(id));
+        (result.edgeIds || new Set()).forEach(id => state.algorithmEdgeIds.add(id));
+        state.algorithmSummary = description;
+        state.algorithmInfo = {
+          type,
+          description,
+          result,
+          detailsHtml
+        };
+        refreshVisualClasses();
+        renderAlgorithmSummary();
+        setStatus(description);
+      }
+
+      function runSelectedAlgorithm() {
+        if (!state.cy) return;
+        const selection = els.algorithmSelect.value;
+        let result;
+        let desc = '';
+        let details = '';
+        const selected = getSelectedNode();
+
+        switch (selection) {
+          case 'weak-component': {
+            if (!selected) {
+              setStatus('Bitte zuerst einen Knoten auswählen.', true);
+              return;
+            }
+            result = getWeakComponent(selected.id());
+            desc = `Schwach verbundene Komponente von „${selected.data('label')}“: ${result.nodeIds.size} Knoten.`;
+            break;
+          }
+          case 'strong-component': {
+            if (!selected) {
+              setStatus('Bitte zuerst einen Knoten auswählen.', true);
+              return;
+            }
+            result = getStrongComponent(selected.id());
+            desc = `Starke Komponente von „${selected.data('label')}“: ${result.nodeIds.size} Knoten.`;
+            details = `<div>Gefundene starke Komponenten im sichtbaren Graphen: <code>${result.componentsCount}</code></div>`;
+            break;
+          }
+          case 'sources': {
+            result = computeSources();
+            desc = `Quellen im sichtbaren Graphen: ${result.nodeIds.size} Knoten.`;
+            break;
+          }
+          case 'sinks': {
+            result = computeSinks();
+            desc = `Senken im sichtbaren Graphen: ${result.nodeIds.size} Knoten.`;
+            break;
+          }
+          case 'cycles': {
+            result = computeCycleNodes();
+            desc = `Knoten in Zyklen: ${result.nodeIds.size}.`;
+            break;
+          }
+          case 'topo': {
+            result = computeTopoLayers();
+            desc = result.isDag
+              ? `Topologische Ordnung berechnet: ${result.layers.length} Schichten.`
+              : `Topologische Ordnung unvollständig: Der sichtbare Graph enthält Zyklen (${result.processed} von ${result.total} Knoten verarbeitet).`;
+            details = '';
+            break;
+          }
+          case 'source-flow': {
+            result = computeSourceFlowSubgraphs();
+            if (result.error) {
+              setStatus(result.error, true);
+              updateAlgorithmSummaryBox(result.error);
+              return;
+            }
+            desc = `Quellenbasierte Flow-Subgraphen: ${result.groups.length} Bereiche aus ${result.sourceIds.length} Quellen.`;
+            details = `<div><strong>Interpretation:</strong> Jeder sichtbare Knoten wird einer dominanten Quelle zugeordnet. Kanten innerhalb desselben Bereichs bleiben erhalten; bereichsübergreifende Kanten werden nur als Übergänge zwischen den Bereichen verstanden.</div><div style="margin-top:6px;">Bereichsübergreifende Kanten: <code>${result.crossEdgeCount}</code></div>`;
+            break;
+          }
+          case 'path-cover': {
+            result = computeMinimumPathCover();
+            if (result.error) {
+              setStatus(result.error, true);
+              updateAlgorithmSummaryBox(result.error);
+              return;
+            }
+            desc = `Minimum Path Cover: ${result.pathCount} Pfade decken ${result.totalNodes} Knoten ab.`;
+            details = `<div><strong>Interpretation:</strong> Dies ist eine möglichst kleine Menge gerichteter Pfade, die zusammen alle sichtbaren Knoten abdecken.</div><div style="margin-top:6px;">Matching-Größe: <code>${result.matchingSize}</code> · Pfadanzahl: <code>${result.pathCount}</code></div>`;
+            break;
+          }
+          case 'longest-dag': {
+            result = computeLongestDagPath();
+            if (result.error) {
+              setStatus(result.error, true);
+              updateAlgorithmSummaryBox(result.error);
+              return;
+            }
+            desc = `Längster Pfad im DAG: ${result.nodeIds.size} Knoten, Länge ${result.length}.`;
+            break;
+          }
+          case 'shortest-path': {
+            result = computeShortestPath();
+            if (result.error) {
+              setStatus(result.error, true);
+              updateAlgorithmSummaryBox(result.error);
+              return;
+            }
+            desc = `Kürzester Pfad von Quelle nach Ziel: ${result.nodeIds.size} Knoten, Distanz ${result.distance}.`;
+            break;
+          }
+          case 'shortest-tree': {
+            result = computeShortestTree();
+            if (result.error) {
+              setStatus(result.error, true);
+              updateAlgorithmSummaryBox(result.error);
+              return;
+            }
+            desc = `Kürzeste-Wege-Baum ab Quelle: ${result.reachable} erreichbare Knoten.`;
+            break;
+          }
+          case 'mst': {
+            result = computeMinimumSpanningTree();
+            desc = `Minimaler Spannbaum / Spannwald (ungerichtet interpretiert): ${result.edgeIds.size} Kanten, Gesamtgewicht ${result.totalWeight}.`;
+            break;
+          }
+          case 'pagerank': {
+            result = computePageRankTop();
+            desc = `PageRank Top-${result.ranks.length} berechnet.`;
+            details = `<div>${result.ranks.map(([id, rank], idx) => `<div><strong>${idx + 1}.</strong> <code>${escapeHtml(id)}</code> — ${rank.toFixed(4)}</div>`).join('')}</div>`;
+            break;
+          }
+          case 'degree-top': {
+            result = computeDegreeTop();
+            desc = `Top-${result.ranked.length} Knoten nach Grad berechnet.`;
+            details = `<div>${result.ranked.map((item, idx) => `<div><strong>${idx + 1}.</strong> <code>${escapeHtml(item.id)}</code> — Grad ${item.total} (in ${item.incoming}, out ${item.outgoing})</div>`).join('')}</div>`;
+            break;
+          }
+          case 'betweenness-top': {
+            result = computeBetweennessTop();
+            desc = `Top-${result.ranked.length} Knoten nach Betweenness-Zentralität berechnet.`;
+            details = `<div>${result.ranked.map((item, idx) => `<div><strong>${idx + 1}.</strong> <code>${escapeHtml(item[0])}</code> — Score ${item[1].toFixed(2)}</div>`).join('')}</div>`;
+            break;
+          }
+          case 'closeness-top': {
+            result = computeClosenessTop();
+            desc = `Top-${result.ranked.length} Knoten nach Closeness-Zentralität berechnet.`;
+            details = `<div>${result.ranked.map((item, idx) => `<div><strong>${idx + 1}.</strong> <code>${escapeHtml(item.id)}</code> — Score ${item.score.toFixed(4)}, erreichbar ${item.reachable}</div>`).join('')}</div>`;
+            break;
+          }
+          default:
+            setStatus('Unbekannter Algorithmus.', true);
+            return;
+        }
+
+        applyAlgorithmResult(result, selection, desc, details);
+      }
+
+      function isolateAlgorithmResult() {
+        if (!state.algorithmNodeIds.size) {
+          setStatus('Es gibt noch kein Algorithmus-Ergebnis zum Isolieren.', true);
+          return;
+        }
+        state.isolatedNodeIds = new Set(state.algorithmNodeIds);
+        state.isolationActive = true;
+        refreshVisualClasses();
+        runLayout(true);
+        setStatus(`${state.algorithmNodeIds.size} Algorithmus-Knoten isoliert und neu angeordnet.`);
+      }
+
+      function isolateSelectedTopoLayers() {
+        if (!state.algorithmInfo || state.algorithmInfo.type !== 'topo') {
+          setStatus('Es ist aktuell kein Schichten-Ergebnis aktiv.', true);
+          return;
+        }
+        if (!state.topoSelectedLayerIndices.size) {
+          state.algorithmNodeIds = new Set(state.algorithmInfo.result.nodeIds || []);
+          state.algorithmEdgeIds = new Set(state.algorithmInfo.result.edgeIds || []);
+        }
+        isolateAlgorithmResult();
+      }
+
+      function buildElementsFromData(data) {
+        if (!data || !Array.isArray(data.nodes)) {
+          throw new Error('Ungültiges JSON: Es wird ein Objekt mit dem Array "nodes" erwartet.');
+        }
+
+        const warnings = [];
+        const nodeMap = new Map();
+        const elements = [];
+
+        for (const rawNode of data.nodes) {
+          if (!rawNode || typeof rawNode !== 'object') {
+            warnings.push('Ein Knoteneintrag ist kein Objekt und wurde ignoriert.');
+            continue;
+          }
+          const id = String(rawNode.id || '').trim();
+          if (!id) {
+            warnings.push('Ein Knoteneintrag ohne "id" wurde ignoriert.');
+            continue;
+          }
+          if (nodeMap.has(id)) {
+            warnings.push(`Doppelte Knotennummer "${id}" wurde ignoriert.`);
+            continue;
+          }
+          const categories = Array.isArray(rawNode.categories) ? rawNode.categories.map(cat => String(cat)).filter(Boolean) : [];
+          const description = typeof rawNode.description === 'string' ? rawNode.description : '';
+          const label = typeof rawNode.name === 'string' && rawNode.name.trim() ? rawNode.name.trim() : id;
+          const successorDetails = new Map();
+          if (Array.isArray(rawNode.successor_details)) {
+            rawNode.successor_details.forEach((detail, detailIndex) => {
+              if (!detail || typeof detail !== 'object') return;
+              const detailId = String(detail.id || '').trim();
+              if (!detailId) return;
+              const reason = typeof detail.reason === 'string'
+                ? detail.reason
+                : (typeof detail.description === 'string'
+                    ? detail.description
+                    : (typeof detail.comment === 'string'
+                        ? detail.comment
+                        : (typeof detail.explanation === 'string' ? detail.explanation : '')));
+              successorDetails.set(detailId, String(reason || ''));
+            });
+          }
+
+          nodeMap.set(id, {
+            id,
+            label,
+            categories,
+            description,
+            successors: Array.isArray(rawNode.successors) ? rawNode.successors.map(s => String(s)) : [],
+            successorDetails
+          });
+        }
+
+        for (const node of nodeMap.values()) {
+          elements.push({ group: 'nodes', data: { id: node.id, label: node.label, categories: node.categories, description: node.description } });
+        }
+
+        const seenEdges = new Set();
+        for (const node of nodeMap.values()) {
+          for (const successorId of node.successors) {
+            if (!nodeMap.has(successorId)) {
+              warnings.push(`Knoten "${node.id}" verweist auf unbekannten Nachfolger "${successorId}".`);
+              continue;
+            }
+            const edgeKey = `${node.id}=>${successorId}`;
+            if (seenEdges.has(edgeKey)) continue;
+            seenEdges.add(edgeKey);
+            const successorReason = node.successorDetails instanceof Map ? (node.successorDetails.get(successorId) || '') : '';
+            elements.push({ group: 'edges', data: { id: edgeKey, source: node.id, target: successorId, weight: 1, description: successorReason, reason: successorReason } });
+          }
+        }
+
+        if (Array.isArray(data.edges)) {
+          data.edges.forEach((edge, index) => {
+            if (!edge || typeof edge !== 'object') {
+              warnings.push(`Ein Edge-Eintrag an Position ${index} ist kein Objekt und wurde ignoriert.`);
+              return;
+            }
+            const source = String(edge.source || '').trim();
+            const target = String(edge.target || '').trim();
+            if (!source || !target) {
+              warnings.push(`Ein Edge-Eintrag an Position ${index} ohne source/target wurde ignoriert.`);
+              return;
+            }
+            if (!nodeMap.has(source) || !nodeMap.has(target)) {
+              warnings.push(`Edge ${source}=>${target} verweist auf unbekannte Knoten.`);
+              return;
+            }
+            const edgeId = String(edge.id || `${source}=>${target}`);
+            const weight = parseNumber(edge.weight, 1);
+            const existingIndex = elements.findIndex(el => el.group === 'edges' && el.data.id === edgeId);
+            const description = edge.description ? String(edge.description) : (edge.reason ? String(edge.reason) : (edge.comment ? String(edge.comment) : (edge.explanation ? String(edge.explanation) : '')));
+            const edgeData = { id: edgeId, source, target, weight, label: edge.label ? String(edge.label) : '', description, reason: description };
+            if (existingIndex >= 0) {
+              elements[existingIndex] = { group: 'edges', data: edgeData };
+            } else {
+              elements.push({ group: 'edges', data: edgeData });
+            }
+          });
+        }
+
+        return { elements, warnings };
+      }
+
+      function initCy(elements) {
+        if (state.cy) state.cy.destroy();
+        state.cy = cytoscape({
+          container: document.getElementById('cy'),
+          elements,
+          wheelSensitivity: 0.16,
+          minZoom: 0.1,
+          maxZoom: 5,
+          motionBlur: true,
+          style: [
+            {
+              selector: 'node',
+              style: {
+                'background-color': '#60a5fa',
+                'border-width': 1.5,
+                'border-color': '#dbeafe',
+                'label': 'data(label)',
+                'color': '#eff6ff',
+                'font-size': 11,
+                'text-wrap': 'wrap',
+                'text-max-width': 150,
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'width': 'label',
+                'height': 'label',
+                'padding': '12px',
+                'shape': 'round-rectangle',
+                'overlay-opacity': 0,
+                'transition-property': 'background-color, border-color, opacity',
+                'transition-duration': '120ms'
+              }
+            },
+            {
+              selector: 'edge',
+              style: {
+                'curve-style': 'bezier',
+                'width': 2,
+                'line-color': '#64748b',
+                'target-arrow-color': '#64748b',
+                'target-arrow-shape': 'triangle',
+                'arrow-scale': 1,
+                'opacity': 0.92,
+                'overlay-opacity': 0
+              }
+            },
+            { selector: '.selected-node', style: { 'background-color': '#fde68a', 'border-color': '#fbbf24', 'border-width': 3, 'color': '#111827', 'z-index': 9999 } },
+            { selector: '.highlight-ancestor', style: { 'background-color': '#34d399', 'border-color': '#a7f3d0', 'border-width': 2.5, 'z-index': 9998 } },
+            { selector: '.highlight-descendant', style: { 'background-color': '#fb923c', 'border-color': '#fed7aa', 'border-width': 2.5, 'z-index': 9998 } },
+            { selector: '.search-match', style: { 'background-color': '#38bdf8', 'border-color': '#bae6fd', 'border-width': 2.5 } },
+            { selector: '.filter-match', style: { 'background-color': '#a78bfa', 'border-color': '#ddd6fe', 'border-width': 2.5 } },
+            { selector: '.algorithm-result', style: { 'background-color': '#f472b6', 'border-color': '#fbcfe8', 'border-width': 3 } },
+            { selector: '.isolate-focus', style: { 'underlay-color': '#bef264', 'underlay-padding': 8, 'underlay-opacity': 0.18 } },
+            { selector: '.highlight-edge-ancestor', style: { 'line-color': '#34d399', 'target-arrow-color': '#34d399', 'width': 3.3 } },
+            { selector: '.highlight-edge-descendant', style: { 'line-color': '#fb923c', 'target-arrow-color': '#fb923c', 'width': 3.3 } },
+            { selector: '.algorithm-edge', style: { 'line-color': '#f472b6', 'target-arrow-color': '#f472b6', 'width': 3.5 } },
+            { selector: '.edge-selected', style: { 'line-color': '#fde68a', 'target-arrow-color': '#fde68a', 'width': 4.2, 'z-index': 999 } },
+            { selector: '.topo-layer-node', style: { 'border-color': 'data(topoLayerBorderColor)', 'border-width': 3.2, 'underlay-color': 'data(topoLayerColor)', 'underlay-padding': 6, 'underlay-opacity': 0.18 } },
+            { selector: '.topo-layer-selected', style: { 'underlay-padding': 11, 'underlay-opacity': 0.34, 'border-width': 4.3 } },
+            { selector: '.click-current-node', style: { 'background-color': '#fde68a', 'border-color': '#f59e0b', 'border-width': 4.5, 'color': '#111827', 'z-index': 9999 } },
+            { selector: '.click-path-node-active', style: { 'underlay-color': '#38bdf8', 'underlay-padding': 9, 'underlay-opacity': 0.2, 'border-width': 3.4 } },
+            { selector: '.click-pred-neighbor', style: { 'background-color': '#34d399', 'border-color': '#bbf7d0', 'border-width': 3.2, 'z-index': 9997 } },
+            { selector: '.click-succ-neighbor', style: { 'background-color': '#fb923c', 'border-color': '#fed7aa', 'border-width': 3.2, 'z-index': 9997 } },
+            { selector: '.click-dim-node', style: { 'background-color': '#475569', 'border-color': '#94a3b8', 'color': '#cbd5e1', 'opacity': 0.42, 'underlay-opacity': 0 } },
+            { selector: '.click-path-edge', style: { 'line-color': '#38bdf8', 'target-arrow-color': '#38bdf8', 'width': 4.2, 'opacity': 1 } },
+            { selector: '.click-pred-neighbor-edge', style: { 'line-color': '#34d399', 'target-arrow-color': '#34d399', 'width': 3.4, 'opacity': 0.96 } },
+            { selector: '.click-succ-neighbor-edge', style: { 'line-color': '#fb923c', 'target-arrow-color': '#fb923c', 'width': 3.4, 'opacity': 0.96 } },
+            { selector: '.click-dim-edge', style: { 'line-color': '#64748b', 'target-arrow-color': '#64748b', 'width': 2, 'opacity': 0.26 } },
+            { selector: '.isolated-out', style: { 'display': 'none' } },
+            { selector: '.click-hidden', style: { 'display': 'none' } }
+          ]
+        });
+
+        state.cy.on('tap', 'node', (event) => {
+          const node = event.target;
+          if (state.clickTraversalModeActive && handleClickTraversalNodeTap(node)) return;
+          state.selectedNodeId = node.id();
+          state.selectedEdgeId = null;
+          refreshVisualClasses();
+          updateSelectedNodeInfo(node);
+          updateSelectedEdgeInfo(null);
+          renderClickTraversalInfo();
+          setStatus(`Knoten „${node.data('label')}“ ausgewählt.`);
+        });
+
+        state.cy.on('tap', 'edge', (event) => {
+          const edge = event.target;
+          state.selectedEdgeId = edge.id();
+          refreshVisualClasses();
+          updateSelectedEdgeInfo(edge);
+          renderClickTraversalInfo();
+          const explanation = getEdgeExplanation(edge);
+          setStatus(explanation
+            ? `Kante ${edge.source().id()} → ${edge.target().id()} ausgewählt. Erklärung geladen.`
+            : `Kante ${edge.source().id()} → ${edge.target().id()} ausgewählt. Keine Erklärung vorhanden.`);
+        });
+
+        state.cy.on('tap', (event) => {
+          if (event.target === state.cy) {
+            if (state.clickTraversalModeActive) {
+              state.selectedEdgeId = null;
+              refreshVisualClasses();
+              updateSelectedEdgeInfo(null);
+              renderClickTraversalInfo();
+              setStatus('Durchklick-Modus bleibt aktiv. Kanten-Auswahl aufgehoben.');
+              return;
+            }
+            state.selectedNodeId = null;
+            state.selectedEdgeId = null;
+            refreshVisualClasses();
+            updateSelectedNodeInfo(null);
+            updateSelectedEdgeInfo(null);
+            renderClickTraversalInfo();
+            setStatus('Auswahl aufgehoben.');
+          }
+        });
+
+        refreshVisualClasses();
+        updateSelectedNodeInfo(null);
+        updateSelectedEdgeInfo(null);
+        renderClickTraversalInfo();
+        syncClickTraversalButtons();
+        runLayout(true);
+      }
+
+      function loadGraphData(data, sourceLabel = 'JSON-Datei') {
+        const { elements, warnings } = buildElementsFromData(data);
+        state.rawData = data;
+        state.warnings = warnings;
+        state.selectedNodeId = null;
+        state.selectedEdgeId = null;
+        state.sourceNodeId = null;
+        state.targetNodeId = null;
+        state.selectedCategories.clear();
+        state.searchMatchedNodeIds.clear();
+        state.filterMatchedNodeIds.clear();
+        clearHighlightState();
+        clearAlgorithmState();
+        state.isolationActive = false;
+        state.isolatedNodeIds.clear();
+        clearClickTraversalState();
+        initCy(elements);
+        state.allCategories = getAllCategories();
+        renderCategoryDropdown();
+        updateSourceTargetSummaries();
+        updateAlgorithmDescription();
+        renderAlgorithmSummary();
+        renderClickTraversalInfo();
+        syncClickTraversalButtons();
+        updateSearchResultInfo('Noch keine Knotensuche ausgeführt.');
+        updateStats();
+
+        const message = `${sourceLabel} geladen: ${state.cy.nodes().length} Knoten, ${state.cy.edges().length} Kanten.`;
+        setStatus(warnings.length ? `${message} Hinweise: ${warnings.join(' | ')}` : message);
+      }
+
+      async function readJsonFile(file) {
+        const text = await file.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          throw new Error('Die Datei enthält kein gültiges JSON.');
+        }
+        loadGraphData(data, file.name);
+      }
+
+      els.jsonFile.addEventListener('change', async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        try { await readJsonFile(file); }
+        catch (error) { setStatus(error.message || 'Fehler beim Laden der JSON-Datei.', true); }
+      });
+
+      els.categorySearch.addEventListener('focus', () => els.categoryDropdownWrap.classList.add('open'));
+      els.categorySearch.addEventListener('input', renderCategoryDropdown);
+      els.filterModeSelect.addEventListener('change', () => {
+        updateCategorySummary();
+        if (state.selectedCategories.size) applyCategoryFilter();
+      });
+      document.addEventListener('click', (event) => {
+        if (!els.categoryDropdownWrap.contains(event.target)) {
+          els.categoryDropdownWrap.classList.remove('open');
+        }
+      });
+      els.categoryDropdownWrap.addEventListener('click', () => els.categoryDropdownWrap.classList.add('open'));
+      els.categoryList.addEventListener('change', (event) => {
+        const category = event.target?.dataset?.category;
+        if (!category) return;
+        if (event.target.checked) state.selectedCategories.add(category);
+        else state.selectedCategories.delete(category);
+        updateCategorySummary();
+      });
+      els.selectedCategoryChips.addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-cat]');
+        if (!btn) return;
+        state.selectedCategories.delete(btn.dataset.cat);
+        renderCategoryDropdown();
+      });
+
+      els.searchNodesBtn.addEventListener('click', performNodeSearch);
+      els.clearSearchBtn.addEventListener('click', clearNodeSearch);
+      els.nodeSearch.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          performNodeSearch();
+        }
+      });
+
+      els.applyFilterBtn.addEventListener('click', applyCategoryFilter);
+      els.clearFilterBtn.addEventListener('click', () => {
+        state.selectedCategories.clear();
+        els.categorySearch.value = '';
+        renderCategoryDropdown();
+        applyCategoryFilter();
+      });
+
+      els.recursiveToggle.addEventListener('change', setRecursiveUiState);
+      els.recursionDepthSelect.addEventListener('change', () => {
+        if (els.recursiveToggle.checked) {
+          setStatus(`Rekursionstiefe auf ${getRecursionDepthLabel()} gesetzt.`);
+        }
+      });
+
+      els.showPredecessorsBtn.addEventListener('click', () => markPredecessors(true));
+      els.showSuccessorsBtn.addEventListener('click', () => markSuccessors(true));
+      els.showBothBtn.addEventListener('click', markBothDirections);
+      els.clearHighlightsBtn.addEventListener('click', clearHighlightsOnly);
+      els.isolateBtn.addEventListener('click', isolateCurrentFocus);
+      els.clearIsolationBtn.addEventListener('click', clearIsolation);
+      els.clickTraversalBtn.addEventListener('click', () => startClickTraversalMode(getSelectedNode()));
+      els.clearClickTraversalBtn.addEventListener('click', stopClickTraversalMode);
+      els.relayoutBtn.addEventListener('click', () => {
+        runLayout(true);
+        const modeLabel = getCurrentRelayoutMode() === 'flow' ? 'Nachfolger lesbar' : 'Kompakt';
+        setStatus(`Aktuell dargestellter Teilgraph im Layoutmodus „${modeLabel}“ neu angeordnet.`);
+      });
+      els.fitBtn.addEventListener('click', () => {
+        if (!state.cy) return;
+        const ok = fitCurrentView(40);
+        if (ok) {
+          const fitMessage = state.clickTraversalModeActive
+            ? 'Ansicht auf den aktuellen Durchklick-Ausschnitt eingepasst.'
+            : (state.isolationActive ? 'Ansicht auf den aktuell isolierten Teilgraphen eingepasst.' : 'Ansicht auf den gesamten sichtbaren Graphen eingepasst.');
+          setStatus(fitMessage);
+        } else {
+          setStatus('Keine sichtbaren Knoten zum Einpassen vorhanden.', true);
+        }
+      });
+      els.setSourceBtn.addEventListener('click', setSelectedAsSource);
+      els.setTargetBtn.addEventListener('click', setSelectedAsTarget);
+      els.algorithmSelect.addEventListener('change', updateAlgorithmDescription);
+      els.algorithmResultInfo.addEventListener('click', (event) => {
+        if (!state.algorithmInfo) return;
+
+        const topoLayerBtn = event.target.closest('button[data-layer-idx]');
+        if (topoLayerBtn && state.algorithmInfo.type === 'topo') {
+          const idx = Number(topoLayerBtn.dataset.layerIdx);
+          if (!Number.isInteger(idx)) return;
+          if (state.topoSelectedLayerIndices.has(idx)) state.topoSelectedLayerIndices.delete(idx);
+          else state.topoSelectedLayerIndices.add(idx);
+          applySelectedTopoLayers();
+          const selectionText = state.topoSelectedLayerIndices.size
+            ? [...state.topoSelectedLayerIndices].sort((a, b) => a - b).map(i => i + 1).join(', ')
+            : 'alle';
+          setStatus(`Schichtenauswahl aktualisiert: ${selectionText}.`);
+          return;
+        }
+
+        if (state.algorithmInfo.type === 'topo') {
+          if (event.target.closest('button[data-topo-select-all]')) {
+            state.topoSelectedLayerIndices = new Set(state.algorithmInfo.result.layers.map((_, idx) => idx));
+            applySelectedTopoLayers();
+            setStatus('Alle Schichten markiert.');
+            return;
+          }
+          if (event.target.closest('button[data-topo-clear-selection]')) {
+            state.topoSelectedLayerIndices.clear();
+            applySelectedTopoLayers();
+            setStatus('Schichtenauswahl geleert.');
+            return;
+          }
+          if (event.target.closest('button[data-topo-isolate]')) {
+            isolateAlgorithmResult();
+            return;
+          }
+        }
+
+        const algoGroupBtn = event.target.closest('button[data-algo-group-idx]');
+        if (algoGroupBtn && ['source-flow', 'path-cover'].includes(state.algorithmInfo.type)) {
+          const idx = Number(algoGroupBtn.dataset.algoGroupIdx);
+          if (!Number.isInteger(idx)) return;
+          if (state.algorithmGroupSelectedIndices.has(idx)) state.algorithmGroupSelectedIndices.delete(idx);
+          else state.algorithmGroupSelectedIndices.add(idx);
+          applySelectedAlgorithmGroups();
+          const selectionText = state.algorithmGroupSelectedIndices.size
+            ? [...state.algorithmGroupSelectedIndices].sort((a, b) => a - b).map(i => i + 1).join(', ')
+            : 'alle';
+          setStatus(`Bereichsauswahl aktualisiert: ${selectionText}.`);
+          return;
+        }
+
+        if (['source-flow', 'path-cover'].includes(state.algorithmInfo.type)) {
+          if (event.target.closest('button[data-algo-group-select-all]')) {
+            state.algorithmGroupSelectedIndices = new Set((state.algorithmInfo.result.groups || []).map((_, idx) => idx));
+            applySelectedAlgorithmGroups();
+            setStatus('Alle Bereiche markiert.');
+            return;
+          }
+          if (event.target.closest('button[data-algo-group-clear-selection]')) {
+            state.algorithmGroupSelectedIndices.clear();
+            applySelectedAlgorithmGroups();
+            setStatus('Bereichsauswahl geleert.');
+            return;
+          }
+          if (event.target.closest('button[data-algo-group-isolate]')) {
+            isolateAlgorithmResult();
+          }
+        }
+      });
+      els.runAlgorithmBtn.addEventListener('click', runSelectedAlgorithm);
+      els.isolateAlgorithmBtn.addEventListener('click', isolateAlgorithmResult);
+      els.clearAlgorithmBtn.addEventListener('click', () => {
+        clearAlgorithmState();
+        refreshVisualClasses();
+        renderAlgorithmSummary();
+        setStatus('Algorithmus-Ergebnis gelöscht.');
+      });
+
+      ['dragenter', 'dragover'].forEach(type => {
+        els.graphWrap.addEventListener(type, (event) => { event.preventDefault(); els.dropHint.classList.add('active'); });
+      });
+      ['dragleave', 'dragend', 'drop'].forEach(type => {
+        els.graphWrap.addEventListener(type, () => els.dropHint.classList.remove('active'));
+      });
+      els.graphWrap.addEventListener('drop', async (event) => {
+        event.preventDefault();
+        const file = event.dataTransfer?.files?.[0];
+        if (!file) return;
+        try { await readJsonFile(file); }
+        catch (error) { setStatus(error.message || 'Fehler beim Laden der JSON-Datei.', true); }
+      });
+
+      const demoData = {
+        title: 'Demo-Graph v4',
+        nodes: [
+          { id: 'start', name: 'Start', categories: ['Root', 'Prozess'], description: 'Startpunkt.', successors: ['analyse', 'planung'] },
+          { id: 'analyse', name: 'Analyse', categories: ['Prozess', 'Backend'], description: 'Analysephase.', successors: ['backend', 'frontend'] },
+          { id: 'planung', name: 'Planung', categories: ['Prozess', 'Management'], description: 'Planungsphase.', successors: ['frontend', 'qa'] },
+          { id: 'backend', name: 'Backend-Service', categories: ['Backend', 'Kritisch'], description: 'Stellt Daten bereit.', successors: ['api', 'monitoring'] },
+          { id: 'frontend', name: 'Frontend-App', categories: ['Frontend', 'Kritisch'], description: 'UI und Bedienlogik.', successors: ['release'] },
+          { id: 'api', name: 'API-Gateway', categories: ['Backend', 'Integration'], description: 'Externe Zugriffe bündeln.', successors: ['release', 'eventbus'] },
+          { id: 'qa', name: 'QA', categories: ['Qualität'], description: 'Tests.', successors: ['release'] },
+          { id: 'monitoring', name: 'Monitoring', categories: ['Betrieb'], description: 'Metriken und Alarme.', successors: ['reporting'] },
+          { id: 'reporting', name: 'Reporting', categories: ['Betrieb', 'Management'], description: 'Stakeholder-Berichte.', successors: ['archive'] },
+          { id: 'release', name: 'Release', categories: ['Deployment', 'Kritisch'], description: 'Produktivsetzung.', successors: ['archive', 'feedback'] },
+          { id: 'feedback', name: 'Feedback', categories: ['Produkt'], description: 'Nutzerfeedback.', successors: ['analyse'] },
+          { id: 'eventbus', name: 'EventBus', categories: ['Integration'], description: 'Verteilt Events.', successors: ['fraud', 'billing'] },
+          { id: 'billing', name: 'Billing', categories: ['Finance'], description: 'Abrechnung.', successors: ['archive'] },
+          { id: 'fraud', name: 'Fraud Detection', categories: ['AI', 'Kritisch'], description: 'Betrugserkennung.', successors: ['alerting'] },
+          { id: 'alerting', name: 'Alerting', categories: ['Betrieb'], description: 'Benachrichtigungen.', successors: ['monitoring'] },
+          { id: 'archive', name: 'Archiv', categories: ['Ende'], description: 'Archivierung.', successors: [] },
+          { id: 'data-lake', name: 'Data Lake', categories: ['Daten'], description: 'Getrennte Komponente.', successors: ['analytics'] },
+          { id: 'analytics', name: 'Analytics', categories: ['Daten', 'Management'], description: 'Analytik-Teilgraph.', successors: ['dashboards'] },
+          { id: 'dashboards', name: 'Dashboards', categories: ['Management'], description: 'Visualisierung.', successors: [] }
+        ],
+        edges: [
+          { source: 'start', target: 'analyse', weight: 1 },
+          { source: 'start', target: 'planung', weight: 2 },
+          { source: 'analyse', target: 'backend', weight: 2 },
+          { source: 'analyse', target: 'frontend', weight: 1 },
+          { source: 'planung', target: 'frontend', weight: 2 },
+          { source: 'planung', target: 'qa', weight: 1 },
+          { source: 'backend', target: 'api', weight: 1 },
+          { source: 'backend', target: 'monitoring', weight: 3 },
+          { source: 'api', target: 'release', weight: 2 },
+          { source: 'api', target: 'eventbus', weight: 1 },
+          { source: 'frontend', target: 'release', weight: 1 },
+          { source: 'qa', target: 'release', weight: 1 },
+          { source: 'release', target: 'archive', weight: 2 },
+          { source: 'release', target: 'feedback', weight: 2 },
+          { source: 'feedback', target: 'analyse', weight: 1 },
+          { source: 'eventbus', target: 'fraud', weight: 1 },
+          { source: 'eventbus', target: 'billing', weight: 2 },
+          { source: 'fraud', target: 'alerting', weight: 1 },
+          { source: 'alerting', target: 'monitoring', weight: 1 },
+          { source: 'monitoring', target: 'reporting', weight: 1 },
+          { source: 'reporting', target: 'archive', weight: 1 },
+          { source: 'billing', target: 'archive', weight: 2 },
+          { source: 'data-lake', target: 'analytics', weight: 1 },
+          { source: 'analytics', target: 'dashboards', weight: 1 }
+        ]
+      };
+
+      try {
+        loadGraphData(demoData, 'eingebaute Demo v4.3');
+      } catch (error) {
+        setStatus(error.message || 'Die eingebaute Demo konnte nicht geladen werden.', true);
+      }
+    })();
+  </script>
+</body>
+</html>
